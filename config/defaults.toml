@@ -1,0 +1,19 @@
+schema_version = 1
+
+[layout]
+mode = "auto"
+solo = "maximized"
+multiple = "automatic"
+dialogs = "floating"
+max_managed_windows = 6
+
+[decorations]
+solo = "none"
+tiled = "border"
+floating = "full"
+
+[theme]
+variant = "dark"
+
+[wine]
+enabled = false

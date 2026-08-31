@@ -1,0 +1,11 @@
+schema_version = 1
+
+[layout]
+mode = "auto"
+dialogs = "floating"
+
+[decorations]
+floating = "full"
+
+[wine]
+enabled = true

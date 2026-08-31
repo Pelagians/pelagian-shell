@@ -1,0 +1,6 @@
+schema_version = 1
+
+[layout]
+mode = "auto"
+solo = "maximized"
+multiple = "automatic"

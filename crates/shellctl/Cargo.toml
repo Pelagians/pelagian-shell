@@ -1,0 +1,19 @@
+[package]
+name = "pelagian-shellctl"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+name = "pelagian_shellctl"
+path = "src/lib.rs"
+
+[[bin]]
+name = "pelagian-shellctl"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
