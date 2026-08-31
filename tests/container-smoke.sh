@@ -44,6 +44,7 @@ while [ "$attempt" -lt 60 ]; do
     if "$engine" exec "$name" pgrep -x labwc >/dev/null 2>&1 \
         && "$engine" exec "$name" test -f "$sentinel" \
         && curl --fail --silent --show-error --insecure --max-time 3 "https://127.0.0.1:${port}/" >/dev/null 2>&1; then
+        "$engine" exec "$name" pelagian-shellctl status >/dev/null
         "$engine" exec "$name" pelagian-shellctl config show >/dev/null
         "$engine" exec "$name" pelagian-layoutd status >/dev/null
         echo "pelagian-shell smoke: PASS image=$image engine=$engine"

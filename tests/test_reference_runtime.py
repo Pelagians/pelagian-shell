@@ -113,6 +113,9 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("make check", workflow_text)
         self.assertIn("make container-smoke", workflow_text)
+        smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
+        self.assertIn("pelagian-shellctl status", smoke)
+        self.assertIn("pelagian-shellctl config show", smoke)
 
     def test_readme_states_the_v0_1_0_boundary(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
