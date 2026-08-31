@@ -114,6 +114,22 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("make check", workflow_text)
         self.assertIn("make container-smoke", workflow_text)
 
+    def test_readme_states_the_v0_1_0_boundary(self) -> None:
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+        for capability in (
+            "Selkies/Labwc reference GUI workspace",
+            "Pelagian visual/session defaults",
+            "strict profiles/drop-ins",
+            "optional Wine appearance capability",
+            "deterministic layout planner",
+            "compositor adapter seam",
+            "planner-only layoutd",
+            "shellctl/status/config tooling",
+        ):
+            self.assertIn(capability, readme)
+        self.assertIn("does not yet provide live automatic tiling", readme)
+
 
 if __name__ == "__main__":
     unittest.main()

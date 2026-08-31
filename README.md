@@ -4,6 +4,20 @@
 
 The first implementation provides strict, inspectable TOML profile resolution, a Rust workspace model/layout planner, and a reference Selkies/Labwc container. `layoutd` remains planner-only until a supported compositor-control path exists; application launch and app-specific quirks stay with consumers.
 
+## v0.1.0
+
+Provides:
+
+- Selkies/Labwc reference GUI workspace;
+- Pelagian visual/session defaults;
+- strict profiles/drop-ins;
+- optional Wine appearance capability;
+- deterministic layout planner and compositor adapter seam;
+- planner-only layoutd; and
+- shellctl/status/config tooling.
+
+v0.1.0 does not yet provide live automatic tiling because a supported targeted Labwc control interface has not been selected.
+
 Quick check:
 
 ```bash
