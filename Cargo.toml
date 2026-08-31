@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/shellctl"]
+members = ["crates/layoutd", "crates/shellctl"]
 resolver = "2"
 
 [workspace.package]

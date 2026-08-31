@@ -31,4 +31,4 @@ Every layer has `schema_version = 1`. No profile executes code, imports another 
 
 ## Control seam
 
-A future Labwc-side adapter needs only targeted operations: maximize/unmaximize a toplevel, snap/unsnap a toplevel to a named region, and optionally change its decoration state. Standard Wayland client protocols do not provide all of these geometry operations, so the adapter is intentionally not assumed to exist yet. See [`compositor-adapter.md`](compositor-adapter.md).
+A future Labwc-side adapter needs only targeted operations: maximize/unmaximize a toplevel, snap/unsnap a toplevel to a named region, and optionally change its decoration state. The initial plans use names such as `auto-2-left`, `auto-3-right-top`, and `auto-5-r1-c1`; the adapter, not the planner, maps those identifiers to Labwc regions. Standard Wayland client protocols do not provide all of these geometry operations, so the adapter is intentionally not assumed to exist yet. See [`compositor-adapter.md`](compositor-adapter.md) and [`layoutd.md`](layoutd.md).
