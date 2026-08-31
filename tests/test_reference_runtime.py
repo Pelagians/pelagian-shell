@@ -18,6 +18,10 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("PELORUS=false", containerfile)
         self.assertIn("ARG VERSION=0.1.0", containerfile)
         self.assertIn('org.opencontainers.image.version="${VERSION}"', containerfile)
+        self.assertLess(
+            containerfile.index("ARG SELKIES_BASE_IMAGE="),
+            containerfile.index("FROM ${RUST_IMAGE} AS build"),
+        )
         self.assertIn("COPY labwc/rc.xml /defaults/labwc.xml", containerfile)
         self.assertIn(
             'COPY ["labwc/theme/Pelagian Shell/", "/usr/share/themes/Pelagian Shell/"]',

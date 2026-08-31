@@ -1,14 +1,14 @@
 # syntax=docker/dockerfile:1.7
 ARG RUST_IMAGE=rust:1.98.0-bookworm
+# Same exact Selkies base currently pinned by Grotto. See docs/reference-runtime.md
+# for the upstream-Labwc provenance decision still required before release.
+ARG SELKIES_BASE_IMAGE=ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:ac7fd6d182238b4a99e66554c5e75be48a714e2a0c9da81bd18e171ff9ba3dd5
 FROM ${RUST_IMAGE} AS build
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 RUN cargo build --release --locked
 
-# Same exact Selkies base currently pinned by Grotto. See docs/reference-runtime.md
-# for the upstream-Labwc provenance decision still required before release.
-ARG SELKIES_BASE_IMAGE=ghcr.io/linuxserver/baseimage-selkies:debiantrixie@sha256:ac7fd6d182238b4a99e66554c5e75be48a714e2a0c9da81bd18e171ff9ba3dd5
 FROM ${SELKIES_BASE_IMAGE}
 ARG VERSION=0.1.0
 
