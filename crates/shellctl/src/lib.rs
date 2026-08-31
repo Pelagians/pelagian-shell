@@ -103,7 +103,6 @@ pub struct Theme {
 #[serde(rename_all = "snake_case")]
 pub enum ThemeVariant {
     Dark,
-    Light,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -222,19 +221,27 @@ pub fn resolve(roots: ConfigRoots, profile: &str) -> Result<ResolvedConfig, Conf
 
     let drop_in_dir = roots.etc.join("profile.d");
     if drop_in_dir.is_dir() {
-        let mut paths = fs::read_dir(&drop_in_dir)
-            .map_err(|error| {
-                ConfigError(format!("cannot read {}: {error}", drop_in_dir.display()))
-            })?
-            .filter_map(Result::ok)
-            .map(|entry| entry.path())
-            .filter(|path| {
-                path.is_file()
-                    && path
-                        .extension()
-                        .is_some_and(|extension| extension == "toml")
-            })
-            .collect::<Vec<_>>();
+        let entries = fs::read_dir(&drop_in_dir).map_err(|error| {
+            ConfigError(format!("cannot read {}: {error}", drop_in_dir.display()))
+        })?;
+        let mut paths = Vec::new();
+        for entry in entries {
+            let path = entry
+                .map_err(|error| {
+                    ConfigError(format!(
+                        "cannot enumerate drop-ins in {}: {error}",
+                        drop_in_dir.display()
+                    ))
+                })?
+                .path();
+            if path.is_file()
+                && path
+                    .extension()
+                    .is_some_and(|extension| extension == "toml")
+            {
+                paths.push(path);
+            }
+        }
         paths.sort();
         for path in paths {
             apply_patch(&mut config, parse_patch(&path)?);
@@ -344,9 +351,9 @@ fn validate_config(config: &Config) -> Result<(), ConfigError> {
             config.schema_version, SCHEMA_VERSION
         )));
     }
-    if config.layout.max_managed_windows == 0 {
+    if !(1..=6).contains(&config.layout.max_managed_windows) {
         return Err(ConfigError(
-            "layout.max_managed_windows must be at least 1".to_owned(),
+            "layout.max_managed_windows must be between 1 and 6".to_owned(),
         ));
     }
     for rule in &config.window_rules {

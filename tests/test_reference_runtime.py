@@ -133,6 +133,28 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             self.assertIn(capability, readme)
         self.assertIn("does not yet provide live automatic tiling", readme)
 
+    def test_configuration_docs_separate_operative_and_planned_behavior(self) -> None:
+        configuration = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
+        schema = (ROOT / "crates/shellctl/src/lib.rs").read_text(encoding="utf-8")
+
+        self.assertIn("## Operative in v0.1.0", configuration)
+        self.assertIn("## Resolved but not dynamically applied in v0.1.0", configuration)
+        for field in (
+            "layout.mode",
+            "decorations.solo",
+            "decorations.tiled",
+            "decorations.floating",
+            "window_rules",
+        ):
+            self.assertIn(field, configuration)
+        self.assertIn("planner_only", configuration)
+        self.assertIn("compositor_adapter = unavailable", configuration)
+        self.assertIn("does not dynamically maximize one window", configuration)
+        self.assertIn("tile multiple windows", configuration)
+        self.assertIn('theme.variant = "dark"', configuration)
+        self.assertIn("`light` is rejected", configuration)
+        self.assertNotIn("Light,", schema)
+
 
 if __name__ == "__main__":
     unittest.main()

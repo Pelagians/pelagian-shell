@@ -11,6 +11,66 @@ fn test_root(name: &str) -> PathBuf {
     root
 }
 
+fn config_roots(root: &std::path::Path, maximum: u8, theme: &str) -> ConfigRoots {
+    let share = root.join("share");
+    let etc = root.join("etc");
+    fs::create_dir_all(share.join("profiles")).unwrap();
+    fs::create_dir_all(&etc).unwrap();
+    fs::write(
+        share.join("defaults.toml"),
+        format!(
+            r#"
+schema_version = 1
+[layout]
+mode = "auto"
+solo = "maximized"
+multiple = "automatic"
+dialogs = "floating"
+max_managed_windows = {maximum}
+[decorations]
+solo = "none"
+tiled = "border"
+floating = "full"
+[theme]
+variant = "{theme}"
+[capabilities]
+wine = false
+"#
+        ),
+    )
+    .unwrap();
+    fs::write(share.join("profiles/default.toml"), "schema_version = 1\n").unwrap();
+    ConfigRoots { share, etc }
+}
+
+#[test]
+fn accepts_only_planner_supported_managed_window_counts() {
+    for (maximum, accepted) in [(0, false), (1, true), (6, true), (7, false)] {
+        let root = test_root(&format!("managed-window-limit-{maximum}"));
+        let result = resolve(config_roots(&root, maximum, "dark"), "default");
+
+        if accepted {
+            assert_eq!(result.unwrap().config.layout.max_managed_windows, maximum);
+        } else {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("layout.max_managed_windows must be between 1 and 6")
+            );
+        }
+    }
+}
+
+#[test]
+fn rejects_unsupported_light_theme() {
+    let root = test_root("light-theme");
+    let error = resolve(config_roots(&root, 6, "light"), "default").unwrap_err();
+
+    assert!(error.to_string().contains("defaults.toml"));
+    assert!(error.to_string().contains("unknown variant `light`"));
+}
+
 #[test]
 fn resolves_selected_profile_after_builtin_defaults() {
     let root = test_root("selected-profile");
