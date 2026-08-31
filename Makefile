@@ -1,5 +1,6 @@
 CARGO ?= cargo
 VERSION ?= 0.1.0
+REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || printf unknown)
 IMAGE ?= pelagian-shell:$(VERSION)
 ENGINE ?= docker
 
@@ -20,7 +21,7 @@ runtime-contract:
 	python3 -m unittest tests.test_reference_runtime
 
 container-build:
-	$(ENGINE) build --build-arg VERSION=$(VERSION) -f Containerfile -t $(IMAGE) .
+	$(ENGINE) build --build-arg VERSION=$(VERSION) --build-arg REVISION=$(REVISION) -f Containerfile -t $(IMAGE) .
 
 container-smoke: container-build
 	ENGINE=$(ENGINE) sh tests/container-smoke.sh $(IMAGE)
