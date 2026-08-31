@@ -18,7 +18,7 @@
   - 5: three top plus two bottom tiles;
   - 6: 3×2.
 - A configured managed-window ceiling moves overflow to floating rather than silently dropping it.
-- A `CompositorAdapter` trait with only lifecycle observation and reconciliation requests.
+- An explicit `CompositorAdapter` trait: lifecycle observation plus a small `CompositorCommand` set (`maximize`, `unmaximize`, `snap`, `unsnap`, optional decoration state). Pure planner output translates to those commands and is tested with a recording adapter.
 
 All planner/model behavior is unit tested without a Wayland server.
 

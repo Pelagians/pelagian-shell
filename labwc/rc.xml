@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<labwc_config>
+  <core>
+    <decoration>server</decoration>
+    <gap>0</gap>
+  </core>
+
+  <theme>
+    <name>Pelagian Shell</name>
+    <titlebar>
+      <layout>close</layout>
+      <showTitle>yes</showTitle>
+    </titlebar>
+    <cornerRadius>2</cornerRadius>
+    <keepBorder>yes</keepBorder>
+    <maximizedDecoration>none</maximizedDecoration>
+    <dropShadows>no</dropShadows>
+    <dropShadowsOnTiled>no</dropShadowsOnTiled>
+  </theme>
+
+  <placement>
+    <policy>cascade</policy>
+  </placement>
+
+  <regions>
+    <region name="auto-2-left" x="0%" y="0%" width="50%" height="100%" />
+    <region name="auto-2-right" x="50%" y="0%" width="50%" height="100%" />
+    <region name="auto-3-left" x="0%" y="0%" width="50%" height="100%" />
+    <region name="auto-3-right-top" x="50%" y="0%" width="50%" height="50%" />
+    <region name="auto-3-right-bottom" x="50%" y="50%" width="50%" height="50%" />
+    <region name="auto-4-top-left" x="0%" y="0%" width="50%" height="50%" />
+    <region name="auto-4-top-right" x="50%" y="0%" width="50%" height="50%" />
+    <region name="auto-4-bottom-left" x="0%" y="50%" width="50%" height="50%" />
+    <region name="auto-4-bottom-right" x="50%" y="50%" width="50%" height="50%" />
+    <region name="auto-5-r0-c0" x="0%" y="0%" width="33.333%" height="50%" />
+    <region name="auto-5-r0-c1" x="33.333%" y="0%" width="33.334%" height="50%" />
+    <region name="auto-5-r0-c2" x="66.667%" y="0%" width="33.333%" height="50%" />
+    <region name="auto-5-r1-c0" x="0%" y="50%" width="50%" height="50%" />
+    <region name="auto-5-r1-c1" x="50%" y="50%" width="50%" height="50%" />
+    <region name="auto-6-r0-c0" x="0%" y="0%" width="33.333%" height="50%" />
+    <region name="auto-6-r0-c1" x="33.333%" y="0%" width="33.334%" height="50%" />
+    <region name="auto-6-r0-c2" x="66.667%" y="0%" width="33.333%" height="50%" />
+    <region name="auto-6-r1-c0" x="0%" y="50%" width="33.333%" height="50%" />
+    <region name="auto-6-r1-c1" x="33.333%" y="50%" width="33.334%" height="50%" />
+    <region name="auto-6-r1-c2" x="66.667%" y="50%" width="33.333%" height="50%" />
+  </regions>
+
+  <windowRules>
+    <windowRule identifier="*" type="normal" serverDecoration="no" />
+    <windowRule type="dialog" serverDecoration="yes">
+      <action name="UnMaximize" />
+      <action name="Raise" />
+      <action name="Focus" />
+    </windowRule>
+    <windowRule type="utility" serverDecoration="yes">
+      <action name="UnMaximize" />
+      <action name="Raise" />
+      <action name="Focus" />
+    </windowRule>
+  </windowRules>
+</labwc_config>

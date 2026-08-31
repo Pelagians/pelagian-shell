@@ -146,12 +146,57 @@ pub struct WorkspacePlan {
     pub ignored: Vec<String>,
 }
 
+/// A supported adapter may apply only these narrow, per-toplevel operations.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum CompositorCommand {
+    Maximize {
+        toplevel_id: String,
+    },
+    Unmaximize {
+        toplevel_id: String,
+    },
+    Snap {
+        toplevel_id: String,
+        region: String,
+    },
+    Unsnap {
+        toplevel_id: String,
+    },
+    SetDecoration {
+        toplevel_id: String,
+        decoration: DecorationState,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DecorationState {
+    None,
+    Border,
+    Full,
+}
+
 /// The only eventual live-compositor dependency. No adapter is implemented yet.
 pub trait CompositorAdapter {
     type Error;
 
-    fn next_toplevel_event(&mut self) -> Result<Option<ToplevelEvent>, Self::Error>;
-    fn reconcile(&mut self, desired: &[Placement]) -> Result<(), Self::Error>;
+    fn observe_toplevel(&mut self) -> Result<Option<ToplevelEvent>, Self::Error>;
+    fn apply_commands(&mut self, commands: &[CompositorCommand]) -> Result<(), Self::Error>;
+}
+
+/// Translate pure planner output into the small semantic adapter contract.
+pub fn reconcile_commands(placements: &[Placement]) -> Vec<CompositorCommand> {
+    placements
+        .iter()
+        .map(|placement| match &placement.request {
+            LayoutRequest::Maximize => CompositorCommand::Maximize {
+                toplevel_id: placement.id.clone(),
+            },
+            LayoutRequest::Snap { region } => CompositorCommand::Snap {
+                toplevel_id: placement.id.clone(),
+                region: region.clone(),
+            },
+        })
+        .collect()
 }
 
 pub fn classify_toplevel(toplevel: &Toplevel, rules: &[WindowRule]) -> Classification {

@@ -6,7 +6,7 @@ The shell supplies a quiet native GUI substrate inside a pod:
 
 - Selkies session convention;
 - upstream Labwc baseline, theme, and XWayland-ready configuration;
-- declarative profile resolution;
+- declarative workload-profile resolution and optional capabilities;
 - optional Wine visual defaults;
 - a tiny status/config command; and
 - `pelagian-layoutd`, a future deterministic layout reconciler.
@@ -24,10 +24,10 @@ Consumers own application installation and launch, business logic, credentials, 
 The resolver applies exactly three layers:
 
 1. `/usr/share/pelagian-shell/defaults.toml`
-2. one named profile selected by `PELAGIAN_SHELL_PROFILE` (default `default`), from `/etc/pelagian-shell/profiles/<name>.toml` when present, otherwise `/usr/share/pelagian-shell/profiles/<name>.toml`
+2. one named **workload profile** selected by `PELAGIAN_SHELL_PROFILE` (default `default`), from `/etc/pelagian-shell/profiles/<name>.toml` when present, otherwise `/usr/share/pelagian-shell/profiles/<name>.toml`
 3. lexicographically ordered `/etc/pelagian-shell/profile.d/*.toml`
 
-Every layer has `schema_version = 1`. No profile executes code, imports another profile, inherits recursively, or templates values. Scalar values use last-layer-wins; `window_rules` append in layer order so their matching order is inspectable.
+Every layer has `schema_version = 1`. Profiles choose workload behavior (`browser`, `legacy-apps`); optional features are resolved data under `[capabilities]` (`wine` is the first). No profile executes code, imports another profile, inherits recursively, or templates values. Scalar values use last-layer-wins; `window_rules` append in layer order so their matching order is inspectable. See [`configuration.md`](configuration.md).
 
 ## Control seam
 

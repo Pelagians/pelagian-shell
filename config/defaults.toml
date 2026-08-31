@@ -15,5 +15,5 @@ floating = "full"
 [theme]
 variant = "dark"
 
-[wine]
-enabled = false
+[capabilities]
+wine = false

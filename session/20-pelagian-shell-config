@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+# LinuxServer copies session defaults only on first run. Refresh only the
+# shell-owned files so an existing /config volume receives shell upgrades.
+install -d -o abc -g abc -m 0755 \
+    /config/.config \
+    /config/.config/labwc \
+    /config/.config/gtk-3.0 \
+    /config/.config/gtk-4.0
+install -o abc -g abc -m 0644 /defaults/labwc.xml /config/.config/labwc/rc.xml
+install -o abc -g abc -m 0755 /defaults/autostart_wayland /config/.config/labwc/autostart
+install -o abc -g abc -m 0644 \
+    /usr/share/pelagian-shell/theme/gtk-3.0/settings.ini \
+    /config/.config/gtk-3.0/settings.ini
+install -o abc -g abc -m 0644 \
+    /usr/share/pelagian-shell/theme/gtk-4.0/settings.ini \
+    /config/.config/gtk-4.0/settings.ini

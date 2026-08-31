@@ -1,0 +1,9 @@
+#!/bin/sh
+set -eu
+
+# XWayland is supported inside the Wayland session. This is only a no-op
+# LinuxServer X11 fallback; pelagian-shell does not maintain an Openbox lane.
+if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
+    umask 077
+    : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
+fi

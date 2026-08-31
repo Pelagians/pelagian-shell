@@ -28,7 +28,7 @@ pub struct Config {
     pub layout: Layout,
     pub decorations: Decorations,
     pub theme: Theme,
-    pub wine: Wine,
+    pub capabilities: Capabilities,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub window_rules: Vec<WindowRule>,
 }
@@ -108,8 +108,8 @@ pub enum ThemeVariant {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(deny_unknown_fields)]
-pub struct Wine {
-    pub enabled: bool,
+pub struct Capabilities {
+    pub wine: bool,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -151,7 +151,7 @@ struct ConfigPatch {
     #[serde(default)]
     theme: Option<ThemePatch>,
     #[serde(default)]
-    wine: Option<WinePatch>,
+    capabilities: Option<CapabilitiesPatch>,
     #[serde(default)]
     window_rules: Vec<WindowRule>,
 }
@@ -191,9 +191,9 @@ struct ThemePatch {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct WinePatch {
+struct CapabilitiesPatch {
     #[serde(default)]
-    enabled: Option<bool>,
+    wine: Option<bool>,
 }
 
 /// Resolve built-in defaults, one selected profile, then lexical local drop-ins.
@@ -329,9 +329,9 @@ fn apply_patch(config: &mut Config, patch: ConfigPatch) {
             config.theme.variant = variant;
         }
     }
-    if let Some(wine) = patch.wine {
-        if let Some(enabled) = wine.enabled {
-            config.wine.enabled = enabled;
+    if let Some(capabilities) = patch.capabilities {
+        if let Some(wine) = capabilities.wine {
+            config.capabilities.wine = wine;
         }
     }
     config.window_rules.extend(patch.window_rules);
@@ -367,4 +367,15 @@ fn validate_rule(rule: &WindowRule) -> Result<(), ConfigError> {
         ));
     }
     Ok(())
+}
+
+/// Return one explicit optional capability from an already resolved config.
+pub fn capability_enabled(
+    resolved: &ResolvedConfig,
+    capability: &str,
+) -> Result<bool, ConfigError> {
+    match capability {
+        "wine" => Ok(resolved.config.capabilities.wine),
+        _ => Err(ConfigError(format!("unknown capability {capability:?}"))),
+    }
 }

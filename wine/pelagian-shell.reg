@@ -1,0 +1,18 @@
+REGEDIT4
+
+; Compact neutral defaults that Wine can apply without an msstyles dependency.
+[HKEY_CURRENT_USER\Control Panel\Colors]
+"ActiveBorder"="52 56 63"
+"ActiveTitle"="32 35 40"
+"AppWorkSpace"="24 26 29"
+"Background"="24 26 29"
+"ButtonFace"="42 45 51"
+"ButtonText"="231 233 237"
+"GrayText"="139 146 156"
+"Hilight"="70 103 145"
+"HilightText"="255 255 255"
+"Menu"="32 35 40"
+"MenuText"="231 233 237"
+"TitleText"="231 233 237"
+"Window"="24 26 29"
+"WindowText"="231 233 237"

@@ -1,0 +1,8 @@
+# Consumer/app data layered after the selected legacy-apps workload profile.
+schema_version = 1
+
+# Replace these match values with PBS's validated identity before shipping.
+[[window_rules]]
+app_id = "pbs"
+title = "*Authentication*"
+disposition = "floating"

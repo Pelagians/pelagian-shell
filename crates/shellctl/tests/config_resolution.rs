@@ -34,26 +34,28 @@ tiled = "border"
 floating = "full"
 [theme]
 variant = "dark"
-[wine]
-enabled = false
+[capabilities]
+wine = false
 "#,
     )
     .unwrap();
     fs::write(
-        share.join("profiles/browser.toml"),
+        share.join("profiles/legacy-apps.toml"),
         r#"
 schema_version = 1
 [layout]
 max_managed_windows = 4
+[capabilities]
+wine = true
 "#,
     )
     .unwrap();
 
-    let resolved = resolve(ConfigRoots { share, etc }, "browser").unwrap();
+    let resolved = resolve(ConfigRoots { share, etc }, "legacy-apps").unwrap();
 
     assert_eq!(resolved.config.layout.max_managed_windows, 4);
     assert_eq!(resolved.config.layout.mode.as_str(), "auto");
-    assert!(!resolved.config.wine.enabled);
+    assert!(resolved.config.capabilities.wine);
 }
 
 #[test]
@@ -79,8 +81,8 @@ tiled = "border"
 floating = "full"
 [theme]
 variant = "dark"
-[wine]
-enabled = false
+[capabilities]
+wine = false
 "#,
     )
     .unwrap();
@@ -149,8 +151,8 @@ tiled = "border"
 floating = "full"
 [theme]
 variant = "dark"
-[wine]
-enabled = false
+[capabilities]
+wine = false
 "#,
     )
     .unwrap();

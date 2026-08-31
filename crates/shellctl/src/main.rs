@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use pelagian_shellctl::{ConfigError, ConfigRoots, render_toml, resolve};
+use pelagian_shellctl::{ConfigError, ConfigRoots, capability_enabled, render_toml, resolve};
 
 fn roots_from_env() -> ConfigRoots {
     ConfigRoots {
@@ -32,10 +32,16 @@ fn show_status() -> Result<(), ConfigError> {
     let profile = profile_from_env();
     let resolved = resolve(roots_from_env(), &profile)?;
     println!(
-        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"wine_enabled\":{},\"compositor_adapter\":\"unavailable\",\"layoutd\":\"planner_only\"}}",
+        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"unavailable\",\"layoutd\":\"planner_only\"}}",
         resolved.config.layout.mode.as_str(),
-        resolved.config.wine.enabled,
+        resolved.config.capabilities.wine,
     );
+    Ok(())
+}
+
+fn show_capability(capability: &str) -> Result<(), ConfigError> {
+    let resolved = resolve(roots_from_env(), &profile_from_env())?;
+    println!("{}", capability_enabled(&resolved, capability)?);
     Ok(())
 }
 
@@ -44,8 +50,9 @@ fn main() -> ExitCode {
     let result = match command.as_slice() {
         [command, action] if command == "config" && action == "show" => show_config(),
         [command] if command == "status" => show_status(),
+        [command, capability] if command == "capability" => show_capability(capability),
         _ => {
-            eprintln!("usage: pelagian-shellctl config show | status");
+            eprintln!("usage: pelagian-shellctl config show | status | capability <name>");
             return ExitCode::from(2);
         }
     };

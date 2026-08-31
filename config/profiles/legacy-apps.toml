@@ -1,0 +1,5 @@
+schema_version = 1
+
+# Workload profile: legacy GUI consumers require Wine defaults.
+[capabilities]
+wine = true

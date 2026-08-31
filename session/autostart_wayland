@@ -1,0 +1,12 @@
+#!/bin/sh
+set -eu
+
+# Labwc runs this through sh. Keep it POSIX; consumer app launch stays outside
+# the shell and must not be encoded in a profile.
+if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
+    umask 077
+    : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
+fi
+
+# pelagian-layoutd is intentionally not started: no supported compositor adapter
+# exists yet, and a planner-only daemon must not claim it controls windows.

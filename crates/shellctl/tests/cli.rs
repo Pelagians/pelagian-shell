@@ -35,8 +35,8 @@ tiled = "border"
 floating = "full"
 [theme]
 variant = "dark"
-[wine]
-enabled = false
+[capabilities]
+wine = false
 "#,
     )
     .unwrap();
@@ -83,8 +83,8 @@ tiled = "border"
 floating = "full"
 [theme]
 variant = "dark"
-[wine]
-enabled = false
+[capabilities]
+wine = false
 "#,
     )
     .unwrap();
@@ -100,5 +100,52 @@ enabled = false
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("\"profile\":\"default\""));
+    assert!(stdout.contains("\"capabilities\":{\"wine\":false}"));
     assert!(stdout.contains("\"compositor_adapter\":\"unavailable\""));
+}
+
+#[test]
+fn capability_reads_the_selected_workload_profile() {
+    let root = test_root("capability");
+    let share = root.join("share");
+    let etc = root.join("etc");
+    fs::create_dir_all(share.join("profiles")).unwrap();
+    fs::create_dir_all(&etc).unwrap();
+    fs::write(
+        share.join("defaults.toml"),
+        r#"
+schema_version = 1
+[layout]
+mode = "auto"
+solo = "maximized"
+multiple = "automatic"
+dialogs = "floating"
+max_managed_windows = 6
+[decorations]
+solo = "none"
+tiled = "border"
+floating = "full"
+[theme]
+variant = "dark"
+[capabilities]
+wine = false
+"#,
+    )
+    .unwrap();
+    fs::write(
+        share.join("profiles/legacy-apps.toml"),
+        "schema_version = 1\n[capabilities]\nwine = true\n",
+    )
+    .unwrap();
+
+    let output = Command::new(env!("CARGO_BIN_EXE_pelagian-shellctl"))
+        .args(["capability", "wine"])
+        .env("PELAGIAN_SHELL_DATA_DIR", &share)
+        .env("PELAGIAN_SHELL_ETC_DIR", &etc)
+        .env("PELAGIAN_SHELL_PROFILE", "legacy-apps")
+        .output()
+        .unwrap();
+
+    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "true\n");
 }

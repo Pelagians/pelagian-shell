@@ -5,7 +5,7 @@
 The initial Rust implementation therefore has two separate contracts:
 
 - pure model/classification/planning functions, fully unit-testable without Wayland; and
-- a small adapter trait that can later observe toplevel lifecycle/state and request `maximize`, `unmaximize`, `snap(region)`, `unsnap`, and optional decoration changes.
+- a small, testable adapter trait that observes toplevel lifecycle and receives explicit commands: `maximize`, `unmaximize`, `snap(region)`, `unsnap`, and optional decoration changes.
 
 The blocker is intentional: standard Wayland client protocols do not grant a normal client authority to resize or place arbitrary other toplevels. A foreign-toplevel protocol can be compositor-specific and is not a portable geometry-control solution. We will choose a tiny supported Labwc extension, upstream mechanism, or another supported adapter only after its behavior is demonstrated. No experimental Labwc IPC is introduced here.
 
