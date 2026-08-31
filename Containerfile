@@ -11,8 +11,12 @@ RUN cargo build --release --locked
 
 FROM ${SELKIES_BASE_IMAGE}
 ARG VERSION=0.1.0
+ARG REVISION=unknown
 
-LABEL org.opencontainers.image.source="https://github.com/Pelagians/pelagian-shell" \
+LABEL org.opencontainers.image.title="Pelagian Shell" \
+    org.opencontainers.image.description="Selkies/Labwc workspace substrate for Pelagian streamed workloads" \
+    org.opencontainers.image.source="https://github.com/Pelagians/pelagian-shell" \
+    org.opencontainers.image.revision="${REVISION}" \
     org.opencontainers.image.version="${VERSION}"
 
 ENV TITLE="Pelagian Shell" \

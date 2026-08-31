@@ -155,6 +155,36 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("`light` is rejected", configuration)
         self.assertNotIn("Light,", schema)
 
+    def test_canonical_image_publication_contract(self) -> None:
+        containerfile = (ROOT / "Containerfile").read_text(encoding="utf-8")
+        makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
+        workflow = (ROOT / ".github/workflows/publish.yml").read_text(encoding="utf-8")
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        architecture = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
+        runtime = (ROOT / "docs/reference-runtime.md").read_text(encoding="utf-8")
+
+        self.assertIn("ARG REVISION=unknown", containerfile)
+        self.assertIn('org.opencontainers.image.revision="${REVISION}"', containerfile)
+        self.assertIn("--build-arg REVISION=$(REVISION)", makefile)
+        self.assertIn("ghcr.io/pelagians/pelagian-shell", workflow)
+        self.assertIn("DOCKER_METADATA_SHORT_SHA_LENGTH: 40", workflow)
+        self.assertIn("type=sha,prefix=sha-", workflow)
+        self.assertIn("type=ref,event=tag", workflow)
+        self.assertIn("type=raw,value=latest,enable={{is_default_branch}}", workflow)
+        self.assertIn("platforms: linux/amd64", workflow)
+        self.assertIn("provenance: mode=max", workflow)
+        self.assertIn("sbom: true", workflow)
+        self.assertIn("make container-smoke", workflow)
+        self.assertIn("packages: write", workflow)
+        self.assertIn(
+            '{{ index .Config.Labels "org.opencontainers.image.revision" }}', workflow
+        )
+        self.assertNotIn(r'\"org.opencontainers.image.revision\"', workflow)
+        self.assertIn("VERSION=${{ github.ref_type == 'tag'", workflow)
+        self.assertIn("ghcr.io/pelagians/pelagian-shell", readme)
+        self.assertIn("LinuxServer Selkies → Pelagian Shell → consumer", architecture)
+        self.assertIn("digest is the canonical immutable identity", runtime)
+
 
 if __name__ == "__main__":
     unittest.main()
