@@ -9,7 +9,7 @@ make container-smoke VERSION=0.1.0
 
 `container-smoke` builds the image, starts its real `/init`, waits for Labwc and the session autostart sentinel, verifies Selkies HTTPS, and reads both status commands. It needs a running Docker or Podman daemon.
 
-The reference ships GTK dark defaults. It deliberately does not install `qt5ct` or `qt6ct`: selecting Qt appearance without the matching consumer runtime is inert configuration. Consumers that include one may add a small data-only drop-in and its matching Qt settings file.
+The reference ships GTK dark defaults, and schema v1 accepts only `theme.variant = "dark"`; no functional light mode is advertised. It deliberately does not install `qt5ct` or `qt6ct`: selecting Qt appearance without the matching consumer runtime is inert configuration. Consumers that include one may add a small data-only drop-in and its matching Qt settings file.
 
 Wine is not installed by the reference image. A Wine consumer selects a workload profile such as `PELAGIAN_SHELL_PROFILE=legacy-apps`; that profile enables `[capabilities].wine = true`. After prefix initialization, it explicitly runs `pelagian-shell-apply-wine-defaults`. The initial registry only sets broadly portable colors; DPI and font defaults remain unconfigured until a Wine/XWayland matrix proves them. No `msstyles` dependency is introduced.
 

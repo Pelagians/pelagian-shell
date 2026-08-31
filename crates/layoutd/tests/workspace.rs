@@ -99,3 +99,27 @@ fn last_matching_title_rule_can_float_an_installer() {
         Some(Classification::Floating)
     );
 }
+
+#[test]
+fn six_window_ceiling_keeps_the_planner_in_its_supported_range() {
+    let mut workspace = Workspace::default();
+    for index in 1..=7 {
+        workspace.upsert(toplevel(
+            &format!("window-{index}"),
+            ToplevelKind::Normal,
+            None,
+        ));
+    }
+
+    let plan = workspace.plan(
+        Output {
+            width: 1200,
+            height: 800,
+        },
+        &[],
+        6,
+    );
+
+    assert_eq!(plan.placements.len(), 6);
+    assert_eq!(plan.floating, ["window-7"]);
+}
