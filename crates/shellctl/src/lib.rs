@@ -2,9 +2,9 @@
 
 use std::env;
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -68,8 +68,14 @@ fn layoutd_running_at(state: &Path) -> bool {
 }
 
 pub fn layoutd_pid_running(pid: u64) -> bool {
-    fs::read_link(format!("/proc/{pid}/exe"))
-        .is_ok_and(|executable| executable.file_name() == Some(OsStr::new("pelagian-layoutd")))
+    let Ok(expected) = env::current_exe()
+        .map(|path| path.with_file_name("pelagian-layoutd"))
+        .and_then(fs::metadata)
+    else {
+        return false;
+    };
+    fs::metadata(format!("/proc/{pid}/exe"))
+        .is_ok_and(|actual| actual.dev() == expected.dev() && actual.ino() == expected.ino())
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -453,5 +459,25 @@ mod tests {
         assert!(!layoutd_running_at(&state));
 
         fs::remove_file(state).unwrap();
+    }
+
+    #[test]
+    fn unrelated_executable_with_layoutd_name_is_not_running() {
+        let root =
+            env::temp_dir().join(format!("pelagian-shellctl-impostor-{}", std::process::id()));
+        let executable = root.join("pelagian-layoutd");
+        fs::create_dir_all(&root).unwrap();
+        fs::copy("/bin/sleep", &executable).unwrap();
+        let mut process = std::process::Command::new(executable)
+            .arg("30")
+            .spawn()
+            .unwrap();
+
+        let running = layoutd_pid_running(u64::from(process.id()));
+
+        process.kill().unwrap();
+        process.wait().unwrap();
+        fs::remove_dir_all(root).unwrap();
+        assert!(!running);
     }
 }

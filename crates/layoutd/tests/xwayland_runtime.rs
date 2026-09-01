@@ -104,6 +104,20 @@ fn malformed_nonempty_wmctrl_inventory_fails_closed() {
 }
 
 #[test]
+fn missing_ewmh_client_list_is_an_empty_inventory() {
+    let root = fixture_root("empty-inventory");
+    let wmctrl = script(
+        &root,
+        "wmctrl",
+        "printf '%s\n' 'Cannot get client list properties.' '(_NET_CLIENT_LIST or _WIN_CLIENT_LIST)' >&2\nexit 1",
+    );
+    let xprop = script(&root, "xprop", "exit 0");
+    let mut adapter = XwaylandEwmhAdapter::with_commands(wmctrl, xprop);
+
+    assert_eq!(adapter.observe_toplevel().unwrap(), None);
+}
+
+#[test]
 fn snap_is_idempotent_when_geometry_is_already_correct() {
     let (mut correct, correct_log) = fixture_adapter("snap-correct", "0 0 600 800", "");
     correct

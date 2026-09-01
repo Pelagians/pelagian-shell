@@ -130,6 +130,8 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
         self.assertIn("pelagian-shellctl status", smoke)
         self.assertIn("pelagian-shellctl config show", smoke)
+        self.assertIn("shell_status=$(exec_x11 pelagian-shellctl status", smoke)
+        self.assertIn("layout_status=$(exec_x11 pelagian-layoutd status", smoke)
 
     def test_readme_states_the_v0_1_0_boundary(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

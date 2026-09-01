@@ -32,7 +32,7 @@ cleanup() {
     if [ "$rc" -ne 0 ]; then
         "$engine" logs "$name" >&2 || true
         "$engine" exec "$name" cat /config/.local/state/pelagian-shell/layoutd.log >&2 || true
-        "$engine" exec "$name" pelagian-layoutd status >&2 || true
+        exec_x11 pelagian-layoutd status >&2 || true
         "$engine" exec "$name" ps aux >&2 || true
     fi
     "$engine" rm -f "$name" >/dev/null 2>&1 || true
@@ -118,11 +118,11 @@ while [ "$attempt" -lt 60 ]; do
     if "$engine" exec "$name" pgrep -x labwc >/dev/null 2>&1 \
         && "$engine" exec "$name" test -f "$sentinel" \
         && curl --fail --silent --show-error --insecure --max-time 3 "https://127.0.0.1:${port}/" >/dev/null 2>&1; then
-        shell_status=$("$engine" exec "$name" pelagian-shellctl status 2>/dev/null || true)
-        layout_status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
+        shell_status=$(exec_x11 pelagian-shellctl status 2>/dev/null || true)
+        layout_status=$(exec_x11 pelagian-layoutd status 2>/dev/null || true)
         if printf '%s' "$shell_status" | grep -q '"layoutd":"running"' \
             && printf '%s' "$layout_status" | grep -q '"compositor_adapter":"xwayland-ewmh"'; then
-            "$engine" exec "$name" pelagian-shellctl config show >/dev/null
+            exec_x11 pelagian-shellctl config show >/dev/null
             break
         fi
     fi
@@ -140,8 +140,8 @@ first_title=pelagian-layout-primary
 first_pid=$(start_window "$first_title")
 first_xid=$(wait_for_window "$first_title")
 wait_for_maximized "$first_xid"
-layoutd_pid=$("$engine" exec "$name" pgrep -fo '[p]elagian-layoutd')
-fd_before=$("$engine" exec "$name" sh -c "find /proc/$layoutd_pid/fd -mindepth 1 -maxdepth 1 | wc -l")
+layoutd_pid=$(exec_x11 pgrep -fo '[p]elagian-layoutd')
+fd_before=$(exec_x11 sh -c "find /proc/$layoutd_pid/fd -mindepth 1 -maxdepth 1 | wc -l")
 
 second_title=pelagian-layout-secondary
 second_pid=$(start_window "$second_title")
@@ -177,8 +177,8 @@ while [ "$cycle" -le 5 ]; do
     cycle=$((cycle + 1))
 done
 
-test "$("$engine" exec "$name" pgrep -fc '[p]elagian-layoutd')" = 1
-fd_after=$("$engine" exec "$name" sh -c "find /proc/$layoutd_pid/fd -mindepth 1 -maxdepth 1 | wc -l")
+test "$(exec_x11 pgrep -fc '[p]elagian-layoutd')" = 1
+fd_after=$(exec_x11 sh -c "find /proc/$layoutd_pid/fd -mindepth 1 -maxdepth 1 | wc -l")
 test "$fd_after" -le "$((fd_before + 2))"
 exec_x11 xwininfo -id "$first_xid" >/dev/null
 exec_x11 kill "$first_pid"

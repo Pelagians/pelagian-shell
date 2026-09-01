@@ -335,11 +335,18 @@ fn command_stdout(
     output: CommandOutput,
 ) -> Result<String, AdapterError> {
     if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        if args == ["-lpGx"]
+            && stderr.contains("Cannot get client list properties.")
+            && stderr.contains("_NET_CLIENT_LIST or _WIN_CLIENT_LIST")
+        {
+            return Ok(String::new());
+        }
         return Err(AdapterError(format!(
             "{} {} failed: {}",
             command.display(),
             args.join(" "),
-            String::from_utf8_lossy(&output.stderr).trim()
+            stderr.trim()
         )));
     }
     String::from_utf8(output.stdout).map_err(|error| {
