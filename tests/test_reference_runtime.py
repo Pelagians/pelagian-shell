@@ -168,7 +168,9 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("--build-arg REVISION=$(REVISION)", makefile)
         self.assertIn("ghcr.io/pelagians/pelagian-shell", workflow)
         self.assertIn("DOCKER_METADATA_SHORT_SHA_LENGTH: 40", workflow)
-        self.assertIn("type=sha,prefix=sha-", workflow)
+        self.assertIn(
+            "type=sha,prefix=sha-,enable=${{ github.ref_type != 'tag' }}", workflow
+        )
         self.assertIn("type=ref,event=tag", workflow)
         self.assertIn("type=raw,value=latest,enable={{is_default_branch}}", workflow)
         self.assertIn("platforms: linux/amd64", workflow)
