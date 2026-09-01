@@ -204,11 +204,22 @@ impl XwaylandEwmhAdapter {
     }
 
     fn run(&self, command: &Path, args: &[&str]) -> Result<String, AdapterError> {
-        let output = Command::new(command)
-            .args(args)
-            .output()
-            .map_err(|error| AdapterError(format!("cannot run {}: {error}", command.display())))?;
-        command_stdout(command, args, output)
+        // ponytail: four bounded attempts cover an atomic executable replacement.
+        for attempt in 0..4 {
+            match Command::new(command).args(args).output() {
+                Ok(output) => return command_stdout(command, args, output),
+                Err(error) if error.raw_os_error() == Some(26) && attempt < 3 => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(error) => {
+                    return Err(AdapterError(format!(
+                        "cannot run {}: {error}",
+                        command.display()
+                    )));
+                }
+            }
+        }
+        unreachable!()
     }
 }
 
@@ -488,7 +499,7 @@ pub fn runtime_status_json() -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::os::unix::fs::symlink;
+    use std::os::unix::fs::{PermissionsExt, symlink};
 
     use super::*;
 
@@ -498,6 +509,35 @@ mod tests {
             runtime_state_path(),
             pelagian_shellctl::layoutd_state_path()
         );
+    }
+
+    #[test]
+    fn command_execution_retries_a_transient_text_file_busy_error() {
+        let nonce = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = env::temp_dir().join(format!(
+            "pelagian-layoutd-command-{}-{nonce}",
+            std::process::id()
+        ));
+        let command = root.join("command");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&command, "#!/bin/sh\nprintf 'ready\\n'\n").unwrap();
+        let mut permissions = fs::metadata(&command).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&command, permissions).unwrap();
+        let writer = OpenOptions::new().write(true).open(&command).unwrap();
+        let release = thread::spawn(move || {
+            thread::sleep(Duration::from_millis(25));
+            drop(writer);
+        });
+
+        let adapter = XwaylandEwmhAdapter::with_commands(&command, &command);
+        assert_eq!(adapter.run(&command, &[]).unwrap().trim(), "ready");
+
+        release.join().unwrap();
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]

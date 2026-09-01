@@ -101,7 +101,7 @@ wait_for_halves() {
 
 start_window() {
     title=$1
-    exec_x11 sh -c "xmessage -title '$title' -name '$title' -buttons '' -geometry 320x200+40+40 '$title' >/tmp/$title.log 2>&1 & echo \$!"
+    exec_x11 sh -c "xmessage -title '$title' -name '$title' -buttons OK:0 -geometry 320x200+40+40 '$title' >/tmp/$title.log 2>&1 & echo \$!"
 }
 
 # Start the image's real /init entrypoint; do not override it.
