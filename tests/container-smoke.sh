@@ -28,6 +28,13 @@ sentinel=/tmp/pelagian-shell-session-smoke
 # Invoked indirectly by the trap below.
 # shellcheck disable=SC2317,SC2329
 cleanup() {
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+        "$engine" logs "$name" >&2 || true
+        "$engine" exec "$name" cat /config/.local/state/pelagian-shell/layoutd.log >&2 || true
+        "$engine" exec "$name" pelagian-layoutd status >&2 || true
+        "$engine" exec "$name" ps aux >&2 || true
+    fi
     "$engine" rm -f "$name" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -111,10 +118,13 @@ while [ "$attempt" -lt 60 ]; do
     if "$engine" exec "$name" pgrep -x labwc >/dev/null 2>&1 \
         && "$engine" exec "$name" test -f "$sentinel" \
         && curl --fail --silent --show-error --insecure --max-time 3 "https://127.0.0.1:${port}/" >/dev/null 2>&1; then
-        "$engine" exec "$name" pelagian-shellctl status | grep -q '"layoutd":"running"'
-        "$engine" exec "$name" pelagian-shellctl config show >/dev/null
-        "$engine" exec "$name" pelagian-layoutd status | grep -q '"compositor_adapter":"xwayland-ewmh"'
-        break
+        shell_status=$("$engine" exec "$name" pelagian-shellctl status 2>/dev/null || true)
+        layout_status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
+        if printf '%s' "$shell_status" | grep -q '"layoutd":"running"' \
+            && printf '%s' "$layout_status" | grep -q '"compositor_adapter":"xwayland-ewmh"'; then
+            "$engine" exec "$name" pelagian-shellctl config show >/dev/null
+            break
+        fi
     fi
     attempt=$((attempt + 1))
     sleep 1
