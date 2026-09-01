@@ -25,7 +25,13 @@ ENV TITLE="Pelagian Shell" \
     AUTO_GPU=true \
     RESTART_APP=false \
     SELKIES_DESKTOP=false \
-    PELORUS=false
+    PELORUS=false \
+    PELAGIAN_LAYOUTD_STATE=/config/.local/state/pelagian-shell/layoutd-status.json
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get install --no-install-recommends -y wmctrl x11-utils util-linux; \
+    rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /src/target/release/pelagian-shellctl /usr/local/bin/pelagian-shellctl
 COPY --from=build /src/target/release/pelagian-layoutd /usr/local/bin/pelagian-layoutd
@@ -52,6 +58,11 @@ RUN set -eux; \
     test -x /usr/local/bin/pelagian-layoutd; \
     test -x /lsiopy/bin/selkies; \
     command -v labwc; \
+    command -v flock; \
+    command -v wmctrl; \
+    command -v xprop; \
+    command -v xwininfo; \
+    command -v xmessage; \
     PELAGIAN_SHELL_DATA_DIR=/usr/share/pelagian-shell \
         PELAGIAN_SHELL_ETC_DIR=/etc/pelagian-shell \
         /usr/local/bin/pelagian-shellctl config show >/dev/null; \

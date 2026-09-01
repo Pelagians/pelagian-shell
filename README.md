@@ -4,7 +4,7 @@
 
 The canonical downstream base image is `ghcr.io/pelagians/pelagian-shell`. Consumers should pin its published digest or full `sha-<commit>` tag rather than copy shell files or derive directly from Selkies.
 
-The first implementation provides strict, inspectable TOML profile resolution, a Rust workspace model/layout planner, and a reference Selkies/Labwc container. `layoutd` remains planner-only until a supported compositor-control path exists; application launch and app-specific quirks stay with consumers.
+The runtime provides strict, inspectable TOML profile resolution, a deterministic Rust workspace planner, and live XWayland automatic layout through a narrow EWMH adapter. Application launch and app-specific quirks stay with consumers.
 
 ## v0.1.0
 
@@ -15,10 +15,10 @@ Provides:
 - strict profiles/drop-ins;
 - optional Wine appearance capability;
 - deterministic layout planner and compositor adapter seam;
-- planner-only layoutd; and
+- live XWayland automatic layout; and
 - shellctl/status/config tooling.
 
-v0.1.0 does not yet provide live automatic tiling because a supported targeted Labwc control interface has not been selected.
+The adapter maximizes one managed X11/XWayland window, tiles two through six managed windows, keeps dialogs/transients floating, and reflows the same XIDs as windows appear and disappear. It does not control native Wayland window geometry.
 
 Quick check:
 

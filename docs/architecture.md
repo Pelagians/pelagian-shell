@@ -9,13 +9,13 @@ The shell supplies a quiet native GUI substrate inside a pod:
 - declarative workload-profile resolution and optional capabilities;
 - optional Wine visual defaults;
 - a tiny status/config command; and
-- `pelagian-layoutd`, a future deterministic layout reconciler.
+- `pelagian-layoutd`, the generic deterministic XWayland layout reconciler.
 
 The outer Pelagian web UI remains the product shell. This repository deliberately does not create a panel, launcher, wallpaper manager, desktop icons, network controls, or a plugin system.
 
 ## Ownership
 
-Labwc remains the compositor and authority for protocol, output, decoration, XWayland, and actual window geometry. `pelagian-layoutd` is not a second window manager. It owns only an in-memory model, classification, deterministic planning, and a narrow reconciliation request through a replaceable compositor adapter.
+Labwc remains the compositor and authority for protocol, output, decoration, XWayland, and actual window geometry. `pelagian-layoutd` is not a second window manager. It owns the generic in-memory model, classification, deterministic planning, and narrow XWayland/EWMH reconciliation.
 
 Consumers own application installation and launch, business logic, credentials, task execution, app-specific quirks, and acceptance tests.
 
@@ -33,4 +33,4 @@ Every layer has `schema_version = 1`. Profiles choose workload behavior (`browse
 
 ## Control seam
 
-A future Labwc-side adapter needs only targeted operations: maximize/unmaximize a toplevel, snap/unsnap a toplevel to a named region, and optionally change its decoration state. The initial plans use names such as `auto-2-left`, `auto-3-right-top`, and `auto-5-r1-c1`; the adapter, not the planner, maps those identifiers to Labwc regions. Standard Wayland client protocols do not provide all of these geometry operations, so the adapter is intentionally not assumed to exist yet. See [`compositor-adapter.md`](compositor-adapter.md) and [`layoutd.md`](layoutd.md).
+The `xwayland-ewmh` adapter observes X11 identities and metadata with `wmctrl`/`xprop`, then applies maximize and geometry changes with `wmctrl`. Native Wayland placement and dynamic EWMH decoration control are deliberately unsupported. See [`compositor-adapter.md`](compositor-adapter.md) and [`layoutd.md`](layoutd.md).

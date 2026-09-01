@@ -1,23 +1,10 @@
 use std::env;
-use std::path::PathBuf;
 use std::process::ExitCode;
 
-use pelagian_shellctl::{ConfigError, ConfigRoots, capability_enabled, render_toml, resolve};
-
-fn roots_from_env() -> ConfigRoots {
-    ConfigRoots {
-        share: env::var_os("PELAGIAN_SHELL_DATA_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/usr/share/pelagian-shell")),
-        etc: env::var_os("PELAGIAN_SHELL_ETC_DIR")
-            .map(PathBuf::from)
-            .unwrap_or_else(|| PathBuf::from("/etc/pelagian-shell")),
-    }
-}
-
-fn profile_from_env() -> String {
-    env::var("PELAGIAN_SHELL_PROFILE").unwrap_or_else(|_| "default".to_owned())
-}
+use pelagian_shellctl::{
+    ConfigError, capability_enabled, layoutd_running, profile_from_env, render_toml, resolve,
+    roots_from_env,
+};
 
 fn show_config() -> Result<(), ConfigError> {
     let resolved = resolve(roots_from_env(), &profile_from_env())?;
@@ -32,9 +19,14 @@ fn show_status() -> Result<(), ConfigError> {
     let profile = profile_from_env();
     let resolved = resolve(roots_from_env(), &profile)?;
     println!(
-        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"unavailable\",\"layoutd\":\"planner_only\"}}",
+        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"xwayland-ewmh\",\"adapter_scope\":\"xwayland\",\"native_wayland_control\":false,\"layoutd\":\"{}\"}}",
         resolved.config.layout.mode.as_str(),
         resolved.config.capabilities.wine,
+        if layoutd_running() {
+            "running"
+        } else {
+            "stopped"
+        },
     );
     Ok(())
 }

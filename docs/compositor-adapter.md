@@ -2,11 +2,11 @@
 
 `pelagian-layoutd` plans layout from observed toplevel metadata but does not own compositor geometry.
 
-The initial Rust implementation therefore has two separate contracts:
+The Rust implementation has two separate contracts:
 
 - pure model/classification/planning functions, fully unit-testable without Wayland; and
-- a small, testable adapter trait that observes toplevel lifecycle and receives explicit commands: `maximize`, `unmaximize`, `snap(region)`, `unsnap`, and optional decoration changes.
+- a small, testable adapter trait implemented by the live `xwayland-ewmh` adapter, which observes X11 lifecycle and receives explicit `maximize`, `unmaximize`, `snap`, and `unsnap` commands.
 
-The blocker is intentional: standard Wayland client protocols do not grant a normal client authority to resize or place arbitrary other toplevels. A foreign-toplevel protocol can be compositor-specific and is not a portable geometry-control solution. We will choose a tiny supported Labwc extension, upstream mechanism, or another supported adapter only after its behavior is demonstrated. No experimental Labwc IPC is introduced here.
+The adapter uses `wmctrl` for EWMH inventory, state, and geometry mutation and `xprop` for authoritative class/type/transient metadata. It never selects windows by a consumer-specific identity. A disappeared XID fails closed.
 
-Until then, the reference Labwc policy handles quiet decorations and transient dialog behavior. Dynamic tiling is planned and tested but not applied to live windows.
+Standard Wayland client protocols still do not grant a normal client authority to resize or place arbitrary native Wayland toplevels, so native Wayland geometry control remains unsupported. The reference Labwc policy handles generic decorations because EWMH has no reliable dynamic `none`/`border`/`full` decoration operation.

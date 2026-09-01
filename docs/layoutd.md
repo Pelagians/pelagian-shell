@@ -18,12 +18,18 @@
   - 5: three top plus two bottom tiles;
   - 6: 3×2.
 - A configured managed-window ceiling moves overflow to floating rather than silently dropping it.
-- An explicit `CompositorAdapter` trait: lifecycle observation plus a small `CompositorCommand` set (`maximize`, `unmaximize`, `snap`, `unsnap`, optional decoration state). Pure planner output translates to those commands and is tested with a recording adapter.
+- An explicit `CompositorAdapter` trait and live `xwayland-ewmh` implementation.
+- Generic X11 window observation through `wmctrl` plus type, transient, class, and state metadata from `xprop`.
+- Idempotent maximize/unmaximize and geometry mutation through `wmctrl`; snapping removes maximized state before applying geometry.
+- A continuous daemon loop started by the Shell-owned Labwc autostart hook.
+- Direct consumption of the same resolved profile/drop-in configuration as `pelagian-shellctl`.
 
 All planner/model behavior is unit tested without a Wayland server.
 
-## Not implemented yet
+## Supported scope
 
-No live Wayland observer, Labwc control adapter, IPC, geometry mutation, or daemon loop is shipped. Standard Wayland does not give an ordinary client authority to place arbitrary other toplevels. The future adapter must demonstrate supported Labwc-side maximize, snap, unsnap, and optional-decoration operations before it can reconcile these plans.
+The live adapter deliberately controls only X11/XWayland toplevels exposed through EWMH. A missing XID fails closed; layoutd never substitutes an app/title guess. `layout.mode = "float"` observes the workspace but performs no automatic placement.
 
-`pelagian-layoutd status` intentionally reports `planner_only` and `compositor_adapter: unavailable` rather than pretending a live layout controller exists.
+Native Wayland geometry control is unsupported. Dynamic per-window decoration mutation is also unavailable through the EWMH adapter; Labwc's static generic normal/dialog/utility decoration rules remain authoritative.
+
+`pelagian-layoutd status` reports adapter capability and verifies the daemon state file's PID before claiming `running`.

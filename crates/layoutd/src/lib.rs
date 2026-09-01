@@ -1,4 +1,12 @@
-//! Deterministic, compositor-independent workspace model and layout planner.
+//! Deterministic workspace model, layout planner, and narrow XWayland adapter.
+
+mod runtime;
+mod xwayland;
+
+pub use runtime::RuntimeSettings;
+pub use xwayland::{
+    AdapterError, XwaylandEwmhAdapter, runtime_state_path, runtime_status_json, write_runtime_state,
+};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Output {
@@ -158,6 +166,7 @@ pub enum CompositorCommand {
     Snap {
         toplevel_id: String,
         region: String,
+        rect: Rect,
     },
     Unsnap {
         toplevel_id: String,
@@ -175,7 +184,7 @@ pub enum DecorationState {
     Full,
 }
 
-/// The only eventual live-compositor dependency. No adapter is implemented yet.
+/// The only live-compositor dependency.
 pub trait CompositorAdapter {
     type Error;
 
@@ -194,9 +203,25 @@ pub fn reconcile_commands(placements: &[Placement]) -> Vec<CompositorCommand> {
             LayoutRequest::Snap { region } => CompositorCommand::Snap {
                 toplevel_id: placement.id.clone(),
                 region: region.clone(),
+                rect: placement.rect,
             },
         })
         .collect()
+}
+
+pub fn transition_commands(
+    previous_placements: &[String],
+    plan: &WorkspacePlan,
+) -> Vec<CompositorCommand> {
+    let mut commands = previous_placements
+        .iter()
+        .filter(|id| plan.floating.contains(id) || plan.ignored.contains(id))
+        .map(|id| CompositorCommand::Unsnap {
+            toplevel_id: id.clone(),
+        })
+        .collect::<Vec<_>>();
+    commands.extend(reconcile_commands(&plan.placements));
+    commands
 }
 
 pub fn classify_toplevel(toplevel: &Toplevel, rules: &[WindowRule]) -> Classification {

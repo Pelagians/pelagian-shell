@@ -1,6 +1,8 @@
 //! Declarative Pelagian Shell configuration resolution.
 
+use std::env;
 use std::error::Error;
+use std::ffi::OsStr;
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -19,6 +21,55 @@ pub struct ConfigRoots {
 pub struct ResolvedConfig {
     pub config: Config,
     pub sources: Vec<PathBuf>,
+}
+
+pub fn roots_from_env() -> ConfigRoots {
+    ConfigRoots {
+        share: env::var_os("PELAGIAN_SHELL_DATA_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/usr/share/pelagian-shell")),
+        etc: env::var_os("PELAGIAN_SHELL_ETC_DIR")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from("/etc/pelagian-shell")),
+    }
+}
+
+pub fn profile_from_env() -> String {
+    env::var("PELAGIAN_SHELL_PROFILE").unwrap_or_else(|_| "default".to_owned())
+}
+
+pub fn layoutd_state_path() -> Option<PathBuf> {
+    env::var_os("PELAGIAN_LAYOUTD_STATE")
+        .map(PathBuf::from)
+        .or_else(|| {
+            env::var_os("XDG_RUNTIME_DIR")
+                .map(PathBuf::from)
+                .map(|root| root.join("pelagian-layoutd/status.json"))
+        })
+}
+
+pub fn layoutd_running() -> bool {
+    layoutd_state_path()
+        .as_deref()
+        .is_some_and(layoutd_running_at)
+}
+
+fn layoutd_running_at(state: &Path) -> bool {
+    let Ok(raw) = fs::read_to_string(state) else {
+        return false;
+    };
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(&raw) else {
+        return false;
+    };
+    let Some(pid) = value.get("pid").and_then(serde_json::Value::as_u64) else {
+        return false;
+    };
+    layoutd_pid_running(pid)
+}
+
+pub fn layoutd_pid_running(pid: u64) -> bool {
+    fs::read_link(format!("/proc/{pid}/exe"))
+        .is_ok_and(|executable| executable.file_name() == Some(OsStr::new("pelagian-layoutd")))
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -384,5 +435,23 @@ pub fn capability_enabled(
     match capability {
         "wine" => Ok(resolved.config.capabilities.wine),
         _ => Err(ConfigError(format!("unknown capability {capability:?}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn state_pid_must_identify_the_layoutd_executable() {
+        let state = env::temp_dir().join(format!(
+            "pelagian-shellctl-state-{}.json",
+            std::process::id()
+        ));
+        fs::write(&state, format!(r#"{{"pid":{}}}"#, std::process::id())).unwrap();
+
+        assert!(!layoutd_running_at(&state));
+
+        fs::remove_file(state).unwrap();
     }
 }
