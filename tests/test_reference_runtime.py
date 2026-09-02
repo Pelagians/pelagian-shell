@@ -134,6 +134,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("layout_status=$(exec_x11 pelagian-layoutd status", smoke)
         self.assertIn("exec_x11 xwininfo -root", smoke)
         self.assertNotIn("exec_x11 wmctrl -d", smoke)
+        self.assertIn("halves timeout expected_left=", smoke)
 
     def test_readme_states_the_v0_1_0_boundary(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

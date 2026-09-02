@@ -96,6 +96,8 @@ wait_for_halves() {
         count=$((count + 1))
         sleep 1
     done
+    printf 'pelagian-shell smoke: halves timeout expected_left="0 0 %s %s" observed_left="%s" expected_right="%s 0 %s %s" observed_right="%s"\n' \
+        "$half" "$height" "$left_geometry" "$half" "$((width - half))" "$height" "$right_geometry" >&2
     return 1
 }
 
