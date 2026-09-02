@@ -279,7 +279,7 @@ impl CompositorAdapter for XwaylandEwmhAdapter {
                     if let Some(rect) = self.restore_rects.get(toplevel_id).copied() {
                         if snapshot.rect != rect || snapshot.maximized {
                             let geometry =
-                                format!("0,{},{},{},{}", rect.x, rect.y, rect.width, rect.height);
+                                format!("1,{},{},{},{}", rect.x, rect.y, rect.width, rect.height);
                             self.mutate(&["-ir", toplevel_id, "-e", &geometry])?;
                         }
                         self.restore_rects.remove(toplevel_id);
@@ -309,7 +309,7 @@ impl CompositorAdapter for XwaylandEwmhAdapter {
                     }
                     if snapshot.rect != *rect || snapshot.maximized {
                         let geometry =
-                            format!("0,{},{},{},{}", rect.x, rect.y, rect.width, rect.height);
+                            format!("1,{},{},{},{}", rect.x, rect.y, rect.width, rect.height);
                         self.mutate(&["-ir", toplevel_id, "-e", &geometry])?;
                     }
                 }

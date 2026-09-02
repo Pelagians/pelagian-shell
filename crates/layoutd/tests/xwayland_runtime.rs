@@ -162,6 +162,29 @@ fn snap_is_idempotent_when_geometry_is_already_correct() {
 }
 
 #[test]
+fn snap_forces_northwest_gravity_for_absolute_placement() {
+    let (mut adapter, log) = fixture_adapter("snap-gravity", "40 40 320 200", "");
+    adapter
+        .apply_commands(&[CompositorCommand::Snap {
+            toplevel_id: "0x01200001".into(),
+            region: "auto-2-right".into(),
+            rect: Rect {
+                x: 600,
+                y: 0,
+                width: 600,
+                height: 800,
+            },
+        }])
+        .unwrap();
+
+    assert!(
+        fs::read_to_string(log)
+            .unwrap()
+            .contains("-ir 0x01200001 -e 1,600,0,600,800")
+    );
+}
+
+#[test]
 fn snap_preserves_the_restore_geometry_of_an_initially_maximized_window() {
     let root = fixture_root("snap-initially-maximized");
     let inventory = root.join("inventory");
@@ -242,7 +265,7 @@ fi
     assert!(
         fs::read_to_string(log)
             .unwrap()
-            .contains("-ir 0x01200001 -e 0,100,100,320,200")
+            .contains("-ir 0x01200001 -e 1,100,100,320,200")
     );
 }
 
@@ -298,7 +321,7 @@ fn unsnap_restores_the_geometry_captured_before_management() {
     assert!(
         fs::read_to_string(log)
             .unwrap()
-            .contains("-ir 0x01200001 -e 0,100,100,320,200")
+            .contains("-ir 0x01200001 -e 1,100,100,320,200")
     );
 }
 
