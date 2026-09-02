@@ -16,21 +16,19 @@ The following resolved configuration and static runtime behavior are operative:
 - capabilities such as `capabilities.wine` and the Wine helper's capability gate;
 - static Labwc configuration and the Pelagian Shell theme;
 - GTK 3 and GTK 4 dark defaults; and
-- the reference Selkies/Labwc runtime;
-- generic ordered `window_rules`; and
-- live XWayland automatic layout.
+- the reference Selkies/Labwc runtime.
 
 Schema v1 accepts only `theme.variant = "dark"` because the runtime installs only dark GTK defaults. `light` is rejected as unsupported. `layout.max_managed_windows` is constrained to `1..=6`, matching the layouts and static Labwc regions shipped in v0.1.0.
 
-## Operative automatic layout
+## Resolved but not dynamically applied in v0.1.0
 
-`pelagian-layoutd` consumes the same resolved `layout.mode`, `layout.solo`, `layout.multiple`, `layout.dialogs`, `layout.max_managed_windows`, `decorations.solo`, `decorations.tiled`, `decorations.floating`, and profile-derived `window_rules` as `pelagian-shellctl`.
+The resolver accepts and reports the target policy fields `layout.mode`, `layout.solo`, `layout.multiple`, `layout.dialogs`, `decorations.solo`, `decorations.tiled`, `decorations.floating`, and profile-derived `window_rules`. They are planned inputs, not live compositor behavior in v0.1.0.
 
-With `layout.mode = "auto"`, layoutd maximizes one managed window and tiles multiple managed windows while dialogs, utilities, transients, and overflow remain floating. With `layout.mode = "float"`, it performs no placement. Ordered window rules remain last-match-wins overrides.
+In particular, v0.1.0 does not dynamically maximize one window, tile multiple windows, change decorations from resolved profiles, or reconcile live compositor state. `pelagian-layoutd` remains a pure planner and reports:
 
 ```text
-layoutd = running
-compositor_adapter = xwayland-ewmh
+layoutd = planner_only
+compositor_adapter = unavailable
 ```
 
 ## Capabilities
@@ -53,10 +51,10 @@ The Wine registry helper requires that resolved capability; it still performs no
 
 ## Consumer drop-ins
 
-Consumers add small data overrides under `/etc/pelagian-shell/profile.d` without forking shell code. Application identities, startup, authentication, and task behavior remain in the consumer repository.
+Consumers add small data overrides without forking shell code. For example, a PBS consumer may install [`examples/legacy-apps/profile.d/80-pbs.toml`](../examples/legacy-apps/profile.d/80-pbs.toml) after validating its real identifiers. It adds a floating authentication-dialog rule only. Application startup, authentication, and task behavior remain in the consumer.
 
-## One-window behavior
+## Planned one-window behavior
 
-The resolved target `layout.solo = "maximized"` means compositor maximization, intentionally **not** true fullscreen, so dialogs remain functional and normal compositor behavior is retained.
+The resolved target `layout.solo = "maximized"` means borderless compositor maximization once a supported live adapter exists. It intentionally is **not** true fullscreen, so dialogs remain functional and normal compositor behavior is retained. This is not dynamically applied in v0.1.0.
 
-The adapter is X11/XWayland-only. Placement of native Wayland windows is unsupported. Dynamic decoration changes cannot be applied safely through EWMH, so the resolved decoration values remain diagnostics while Labwc's generic static rules supply the current decoration behavior.
+Grotto's ChatGPT desktop runtime is a consumer-side exception: its Electron window resets bounds after mapping, so Grotto keeps its app-specific true-fullscreen repair. That rule must not enter a generic profile or the shell baseline.

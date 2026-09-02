@@ -61,7 +61,7 @@ wine = false
 }
 
 #[test]
-fn status_reports_resolved_profile_and_live_adapter_capability() {
+fn status_reports_resolved_profile_without_claiming_a_live_adapter() {
     let root = test_root("status");
     let share = root.join("share");
     let etc = root.join("etc");
@@ -101,10 +101,7 @@ wine = false
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("\"profile\":\"default\""));
     assert!(stdout.contains("\"capabilities\":{\"wine\":false}"));
-    assert!(stdout.contains("\"compositor_adapter\":\"xwayland-ewmh\""));
-    assert!(stdout.contains("\"adapter_scope\":\"xwayland\""));
-    assert!(stdout.contains("\"native_wayland_control\":false"));
-    assert!(stdout.contains("\"layoutd\":\"stopped\""));
+    assert!(stdout.contains("\"compositor_adapter\":\"unavailable\""));
 }
 
 #[test]

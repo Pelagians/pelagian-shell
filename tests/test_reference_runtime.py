@@ -16,10 +16,6 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("PIXELFLUX_WAYLAND=true", containerfile)
         self.assertIn("SELKIES_DESKTOP=false", containerfile)
         self.assertIn("PELORUS=false", containerfile)
-        self.assertIn(
-            "PELAGIAN_LAYOUTD_STATE=/config/.local/state/pelagian-shell/layoutd-status.json",
-            containerfile,
-        )
         self.assertIn("ARG VERSION=0.1.0", containerfile)
         self.assertIn('org.opencontainers.image.version="${VERSION}"', containerfile)
         self.assertLess(
@@ -34,14 +30,6 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("COPY session/autostart_wayland /defaults/autostart_wayland", containerfile)
         self.assertIn("/init", (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8"))
         self.assertNotIn("labwc -i", containerfile)
-        self.assertIn(
-            "apt-get install --no-install-recommends -y wmctrl x11-utils util-linux",
-            containerfile,
-        )
-        self.assertIn("command -v flock", containerfile)
-        self.assertIn("command -v wmctrl", containerfile)
-        self.assertIn("command -v xprop", containerfile)
-        self.assertIn("command -v xwininfo", containerfile)
 
     def test_labwc_regions_cover_every_current_planner_region(self) -> None:
         root = ET.parse(ROOT / "labwc/rc.xml").getroot()
@@ -90,10 +78,6 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("/config/.config/labwc/autostart", init)
         self.assertIn("gtk-3.0/settings.ini", init)
         self.assertIn("gtk-4.0/settings.ini", init)
-        autostart = (ROOT / "session/autostart_wayland").read_text(encoding="utf-8")
-        self.assertIn("pelagian-layoutd", autostart)
-        self.assertIn('flock -n -F "$state_dir/layoutd.lock" pelagian-layoutd', autostart)
-        self.assertNotIn("intentionally not started", autostart)
 
     def test_wine_defaults_are_explicit_and_do_not_require_msstyles(self) -> None:
         apply_defaults = (ROOT / "wine/apply-defaults.sh").read_text(encoding="utf-8")
@@ -109,13 +93,15 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         defaults = (ROOT / "config/defaults.toml").read_text(encoding="utf-8")
         browser = (ROOT / "config/profiles/browser.toml").read_text(encoding="utf-8")
         legacy_apps = (ROOT / "config/profiles/legacy-apps.toml").read_text(encoding="utf-8")
+        pbs = (ROOT / "examples/legacy-apps/profile.d/80-pbs.toml").read_text(encoding="utf-8")
 
         self.assertIn("[capabilities]", defaults)
         self.assertIn("wine = false", defaults)
         self.assertNotIn("[capabilities]", browser)
         self.assertIn("[capabilities]", legacy_apps)
         self.assertIn("wine = true", legacy_apps)
-        self.assertNotIn("[[window_rules]]", browser)
+        self.assertIn("[[window_rules]]", pbs)
+        self.assertNotIn("launch", pbs.lower())
         self.assertFalse((ROOT / "config/profiles/wine.toml").exists())
 
     def test_docs_and_ci_expose_the_real_runtime_gate(self) -> None:
@@ -130,11 +116,6 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
         self.assertIn("pelagian-shellctl status", smoke)
         self.assertIn("pelagian-shellctl config show", smoke)
-        self.assertIn("shell_status=$(exec_x11 pelagian-shellctl status", smoke)
-        self.assertIn("layout_status=$(exec_x11 pelagian-layoutd status", smoke)
-        self.assertIn("exec_x11 xwininfo -root", smoke)
-        self.assertNotIn("exec_x11 wmctrl -d", smoke)
-        self.assertIn("halves timeout expected_left=", smoke)
 
     def test_readme_states_the_v0_1_0_boundary(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -146,18 +127,18 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             "optional Wine appearance capability",
             "deterministic layout planner",
             "compositor adapter seam",
-            "live XWayland automatic layout",
+            "planner-only layoutd",
             "shellctl/status/config tooling",
         ):
             self.assertIn(capability, readme)
-        self.assertIn("does not control native Wayland window geometry", readme)
+        self.assertIn("does not yet provide live automatic tiling", readme)
 
     def test_configuration_docs_separate_operative_and_planned_behavior(self) -> None:
         configuration = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
         schema = (ROOT / "crates/shellctl/src/lib.rs").read_text(encoding="utf-8")
 
         self.assertIn("## Operative in v0.1.0", configuration)
-        self.assertIn("## Operative automatic layout", configuration)
+        self.assertIn("## Resolved but not dynamically applied in v0.1.0", configuration)
         for field in (
             "layout.mode",
             "decorations.solo",
@@ -166,10 +147,10 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             "window_rules",
         ):
             self.assertIn(field, configuration)
-        self.assertIn("xwayland-ewmh", configuration)
-        self.assertIn("native Wayland", configuration)
-        self.assertIn("maximizes one managed window", configuration)
-        self.assertIn("tiles multiple managed windows", configuration)
+        self.assertIn("planner_only", configuration)
+        self.assertIn("compositor_adapter = unavailable", configuration)
+        self.assertIn("does not dynamically maximize one window", configuration)
+        self.assertIn("tile multiple windows", configuration)
         self.assertIn('theme.variant = "dark"', configuration)
         self.assertIn("`light` is rejected", configuration)
         self.assertNotIn("Light,", schema)

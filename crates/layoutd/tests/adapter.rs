@@ -1,8 +1,8 @@
 use std::convert::Infallible;
 
 use pelagian_layoutd::{
-    CompositorAdapter, CompositorCommand, LayoutRequest, Output, Rect, ToplevelEvent, plan,
-    reconcile_commands, transition_commands,
+    CompositorAdapter, CompositorCommand, LayoutRequest, Output, ToplevelEvent, plan,
+    reconcile_commands,
 };
 
 #[derive(Default)]
@@ -44,22 +44,10 @@ fn planner_requests_are_translated_to_small_explicit_compositor_commands() {
             CompositorCommand::Snap {
                 toplevel_id: "left".into(),
                 region: "auto-2-left".into(),
-                rect: Rect {
-                    x: 0,
-                    y: 0,
-                    width: 600,
-                    height: 800,
-                },
             },
             CompositorCommand::Snap {
                 toplevel_id: "right".into(),
                 region: "auto-2-right".into(),
-                rect: Rect {
-                    x: 600,
-                    y: 0,
-                    width: 600,
-                    height: 800,
-                },
             },
         ]
     );
@@ -68,31 +56,4 @@ fn planner_requests_are_translated_to_small_explicit_compositor_commands() {
     adapter.apply_commands(&commands).unwrap();
     assert_eq!(adapter.applied, commands);
     assert_eq!(adapter.observe_toplevel().unwrap(), None);
-}
-
-#[test]
-fn a_previously_managed_window_is_unsnapped_when_it_becomes_floating() {
-    let mut workspace = pelagian_layoutd::Workspace::default();
-    workspace.upsert(pelagian_layoutd::Toplevel {
-        id: "window".into(),
-        app_id: "fixture".into(),
-        title: "Window".into(),
-        kind: pelagian_layoutd::ToplevelKind::Dialog,
-        parent_id: None,
-    });
-    let plan = workspace.plan(
-        Output {
-            width: 1200,
-            height: 800,
-        },
-        &[],
-        6,
-    );
-
-    assert_eq!(
-        transition_commands(&["window".into()], &plan),
-        vec![CompositorCommand::Unsnap {
-            toplevel_id: "window".into(),
-        }]
-    );
 }

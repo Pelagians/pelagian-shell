@@ -8,6 +8,5 @@ if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
     : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
 fi
 
-state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
-mkdir -p "$state_dir"
-flock -n -F "$state_dir/layoutd.lock" pelagian-layoutd >> "$state_dir/layoutd.log" 2>&1 &
+# pelagian-layoutd is intentionally not started: no supported compositor adapter
+# exists yet, and a planner-only daemon must not claim it controls windows.
