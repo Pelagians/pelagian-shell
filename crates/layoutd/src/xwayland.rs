@@ -384,10 +384,15 @@ fn parse_wm_class(properties: &str) -> Option<String> {
 }
 
 fn parse_window_kind(properties: &str) -> ToplevelKind {
-    let line = properties
+    let Some(line) = properties
         .lines()
         .find(|line| line.starts_with("_NET_WM_WINDOW_TYPE"))
-        .unwrap_or("");
+    else {
+        return ToplevelKind::Normal;
+    };
+    if line.contains("not found") {
+        return ToplevelKind::Normal;
+    }
     if line.contains("_NET_WM_WINDOW_TYPE_DIALOG") {
         ToplevelKind::Dialog
     } else if line.contains("_NET_WM_WINDOW_TYPE_UTILITY") {
@@ -520,6 +525,14 @@ mod tests {
         assert_eq!(
             runtime_state_path(),
             pelagian_shellctl::layoutd_state_path()
+        );
+    }
+
+    #[test]
+    fn missing_ewmh_window_type_defaults_to_normal() {
+        assert_eq!(
+            parse_window_kind("_NET_WM_WINDOW_TYPE:  not found."),
+            ToplevelKind::Normal
         );
     }
 
