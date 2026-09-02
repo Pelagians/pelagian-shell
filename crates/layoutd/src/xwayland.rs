@@ -37,6 +37,7 @@ struct WindowSnapshot {
 pub struct XwaylandEwmhAdapter {
     wmctrl: PathBuf,
     xprop: PathBuf,
+    xwininfo: PathBuf,
     known: BTreeMap<String, Toplevel>,
     snapshots: BTreeMap<String, WindowSnapshot>,
     restore_rects: BTreeMap<String, Rect>,
@@ -45,12 +46,16 @@ pub struct XwaylandEwmhAdapter {
 
 impl XwaylandEwmhAdapter {
     pub fn new() -> Self {
-        Self::with_commands("wmctrl", "xprop")
+        let mut adapter = Self::with_commands("wmctrl", "xprop");
+        adapter.xwininfo = "xwininfo".into();
+        adapter
     }
 
     pub fn with_commands(wmctrl: impl Into<PathBuf>, xprop: impl Into<PathBuf>) -> Self {
+        let wmctrl = wmctrl.into();
         Self {
-            wmctrl: wmctrl.into(),
+            xwininfo: wmctrl.clone(),
+            wmctrl,
             xprop: xprop.into(),
             known: BTreeMap::new(),
             snapshots: BTreeMap::new(),
@@ -60,21 +65,21 @@ impl XwaylandEwmhAdapter {
     }
 
     pub fn output(&self) -> Result<Output, AdapterError> {
-        let raw = self.run(&self.wmctrl, &["-d"])?;
-        for line in raw.lines() {
-            let Some(marker) = line.find("DG:") else {
-                continue;
-            };
-            let dimensions = line[marker + 3..].split_whitespace().next().unwrap_or("");
-            let Some((width, height)) = dimensions.split_once('x') else {
-                continue;
-            };
-            if let (Ok(width), Ok(height)) = (width.parse(), height.parse()) {
+        let raw = self.run(&self.xwininfo, &["-root"])?;
+        let dimension = |name: &str| {
+            raw.lines().find_map(|line| {
+                line.trim()
+                    .strip_prefix(name)
+                    .and_then(|value| value.trim().parse::<u32>().ok())
+            })
+        };
+        if let (Some(width), Some(height)) = (dimension("Width:"), dimension("Height:")) {
+            if width > 0 && height > 0 {
                 return Ok(Output { width, height });
             }
         }
         Err(AdapterError(
-            "wmctrl did not report an EWMH desktop geometry".to_owned(),
+            "xwininfo did not report a positive X root geometry".to_owned(),
         ))
     }
 

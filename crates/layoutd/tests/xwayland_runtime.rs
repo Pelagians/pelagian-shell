@@ -39,8 +39,8 @@ fn fixture_adapter(name: &str, geometry: &str, state: &str) -> (XwaylandEwmhAdap
         "wmctrl",
         &format!(
             r#"
-if [ "$*" = "-d" ]; then
-  printf '%s\n' '0  * DG: 1200x800  VP: 0,0  WA: 0,0 1200x800  Workspace 1'
+if [ "$*" = "-root" ]; then
+  printf '%s\n' '  Width: 1200' '  Height: 800'
 elif [ "$*" = "-lpGx" ]; then
   printf '%s\n' '0x01200001  0 4242 {geometry} fixture-host fixture.Fixture Fixture Primary'
 else
@@ -82,6 +82,32 @@ fn adapter_observes_generic_xwayland_identity_type_parent_and_output() {
     assert_eq!(toplevel.app_id, "fixture.Fixture");
     assert_eq!(toplevel.title, "Fixture Primary");
     assert_eq!(toplevel.parent_id, None);
+}
+
+#[test]
+fn output_uses_x_root_geometry_without_ewmh_desktops() {
+    let root = fixture_root("root-output");
+    let xwininfo = script(
+        &root,
+        "xwininfo",
+        r#"
+if [ "$*" = "-root" ]; then
+  printf '%s\n' '  Width: 1200' '  Height: 800'
+else
+  exit 1
+fi
+"#,
+    );
+    let xprop = script(&root, "xprop", "exit 0");
+    let adapter = XwaylandEwmhAdapter::with_commands(xwininfo, xprop);
+
+    assert_eq!(
+        adapter.output().unwrap(),
+        pelagian_layoutd::Output {
+            width: 1200,
+            height: 800,
+        }
+    );
 }
 
 #[test]

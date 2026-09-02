@@ -83,7 +83,7 @@ wait_for_halves() {
     right=$2
     count=0
     while [ "$count" -lt 40 ]; do
-        dimensions=$(exec_x11 wmctrl -d | awk '/\*/ { for (i=1; i<=NF; i++) if ($i == "DG:") { print $(i+1); exit } }')
+        dimensions=$(exec_x11 xwininfo -root | awk '$1 == "Width:" { width=$2 } $1 == "Height:" { height=$2 } END { print width "x" height }')
         width=${dimensions%x*}
         height=${dimensions#*x}
         half=$((width / 2))
