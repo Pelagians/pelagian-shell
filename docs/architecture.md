@@ -17,7 +17,7 @@ The outer Pelagian web UI remains the product shell. This repository deliberatel
 
 Labwc remains the compositor and authority for protocol, output, decoration, XWayland, and actual window geometry. `pelagian-layoutd` is not a second window manager. It owns only an in-memory model, classification, deterministic planning, and a narrow reconciliation request through a replaceable compositor adapter.
 
-Consumers own application installation and launch, business logic, credentials, task execution, app-specific quirks, and acceptance tests.
+Consumers own application installation and launch, business logic, credentials, task execution, app-specific quirks, and acceptance tests. A consumer may install exactly one executable hook at `/usr/local/bin/pelagian-shell-consumer`; the Shell keeps the complete Labwc autostart and runs that hook in the background so an application failure cannot replace or terminate Shell-owned session services.
 
 The image dependency is one-way: **LinuxServer Selkies → Pelagian Shell → consumer**. Pelagian Shell never imports consumer code, and its release does not depend on Grotto, Cage, or any other downstream build. Consumers add their own runtime and application layers from an immutable Pelagian Shell image reference.
 

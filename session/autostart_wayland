@@ -1,11 +1,26 @@
 #!/bin/sh
 set -eu
 
-# Labwc runs this through sh. Keep it POSIX; consumer app launch stays outside
-# the shell and must not be encoded in a profile.
+# Labwc runs this through sh. Keep it POSIX; consumers own only this hook.
 if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
     umask 077
     : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
+fi
+
+consumer_hook=/usr/local/bin/pelagian-shell-consumer
+if [ -x "$consumer_hook" ]; then
+    state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+    umask 077
+    mkdir -p "$state_dir"
+    rm -f "$state_dir/consumer.status"
+    (
+        set +e
+        "$consumer_hook" >> "$state_dir/consumer.log" 2>&1 &
+        consumer_pid=$!
+        printf '%s\n' "$consumer_pid" > "$state_dir/consumer.pid"
+        wait "$consumer_pid"
+        printf '%s\n' "$?" > "$state_dir/consumer.status"
+    ) &
 fi
 
 # pelagian-layoutd is intentionally not started: no supported compositor adapter

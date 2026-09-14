@@ -4,7 +4,7 @@
 
 The canonical downstream base image is `ghcr.io/pelagians/pelagian-shell`. Consumers should pin its published digest or full `sha-<commit>` tag rather than copy shell files or derive directly from Selkies.
 
-The first implementation provides strict, inspectable TOML profile resolution, a Rust workspace model/layout planner, and a reference Selkies/Labwc container. `layoutd` remains planner-only until a supported compositor-control path exists; application launch and app-specific quirks stay with consumers.
+The first implementation provides strict, inspectable TOML profile resolution, a Rust workspace model/layout planner, and a reference Selkies/Labwc container. `layoutd` remains planner-only until a supported compositor-control path exists. Consumers install an executable `/usr/local/bin/pelagian-shell-consumer`; the Shell-owned Labwc autostart launches it independently and records its exit status under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
 
 ## v0.1.0
 
