@@ -16,7 +16,8 @@ The following resolved configuration and static runtime behavior are operative:
 - capabilities such as `capabilities.wine` and the Wine helper's capability gate;
 - static Labwc configuration and the Pelagian Shell theme;
 - GTK 3 and GTK 4 dark defaults; and
-- the reference Selkies/Labwc runtime.
+- the reference Selkies/Labwc runtime; and
+- the optional `/usr/local/bin/pelagian-shell-consumer` application hook, with logs, PID, and exit status in `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
 
 Schema v1 accepts only `theme.variant = "dark"` because the runtime installs only dark GTK defaults. `light` is rejected as unsupported. `layout.max_managed_windows` is constrained to `1..=6`, matching the layouts and static Labwc regions shipped in v0.1.0.
 
