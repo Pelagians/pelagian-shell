@@ -23,6 +23,28 @@ if ! "$engine" info >/dev/null 2>&1; then
     exit 2
 fi
 
+if [ "$#" -lt 3 ]; then
+    ENGINE="$engine" sh "$0" "$image" 1920 1080
+    ENGINE="$engine" sh "$0" "$image" 1366 768
+    echo "pelagian-shell smoke: PASS image=$image engine=$engine resolutions=1920x1080,1366x768"
+    exit 0
+fi
+
+width=$2
+height=$3
+case "$width" in
+    ''|*[!0-9]*|0)
+        echo "pelagian-shell smoke: resolution must contain positive integers" >&2
+        exit 2
+        ;;
+esac
+case "$height" in
+    ''|*[!0-9]*|0)
+        echo "pelagian-shell smoke: resolution must contain positive integers" >&2
+        exit 2
+        ;;
+esac
+
 name="pelagian-shell-smoke-$$"
 config_volume="$name-config"
 port=${PELAGIAN_SHELL_SMOKE_PORT:-13001}
@@ -309,48 +331,6 @@ PY
     return 1
 }
 
-stream_resolution() {
-    "$engine" exec -i --user abc "$name" python3 - "$1" "$2" <<'PY'
-import asyncio
-import json
-import sys
-
-from aiohttp import ClientSession, WSMsgType
-
-width, height = map(int, sys.argv[1:])
-
-async def resize():
-    async with ClientSession() as session:
-        async with session.ws_connect("https://127.0.0.1:3001/websocket", ssl=False) as websocket:
-            settings = {
-                "displayId": "primary",
-                "force_aligned_resolution": False,
-                "initialClientWidth": width,
-                "initialClientHeight": height,
-                "manual_resolution": False,
-            }
-            await websocket.send_str("SETTINGS," + json.dumps(settings))
-            await websocket.send_str(f"r,{width}x{height},primary")
-            async with asyncio.timeout(30):
-                async for message in websocket:
-                    if message.type != WSMsgType.TEXT:
-                        continue
-                    if message.data.startswith("KILL "):
-                        raise RuntimeError(message.data)
-                    try:
-                        payload = json.loads(message.data)
-                    except json.JSONDecodeError:
-                        continue
-                    if payload.get("type") == "stream_resolution" and (
-                        payload.get("width"), payload.get("height")
-                    ) == (width, height):
-                        return
-    raise RuntimeError("Selkies closed before confirming the streamed resolution")
-
-asyncio.run(resize())
-PY
-}
-
 restart_layoutd() {
     status=$("$engine" exec "$name" pelagian-layoutd status)
     old_pid=$(printf '%s\n' "$status" | python3 -c 'import json, sys; print(json.load(sys.stdin)["pid"])')
@@ -412,6 +392,8 @@ mount_mode=ro
     --env "PUID=$(id -u)" \
     --env "PGID=$(id -g)" \
     --env PIXELFLUX_WAYLAND=true \
+    --env SELKIES_MANUAL_WIDTH="$width" \
+    --env SELKIES_MANUAL_HEIGHT="$height" \
     --env PELAGIAN_SHELL_SESSION_SENTINEL="$sentinel" \
     --volume "$config_volume:/config" \
     --volume "$root/tests/layout-fixture.py:/usr/local/bin/pelagian-shell-consumer:$mount_mode" \
@@ -458,8 +440,7 @@ grep -Fqx "gtk-decoration-layout=:close" /config/.config/gtk-3.0/settings.ini
 grep -Fqx "gtk-decoration-layout=:close" /config/.config/gtk-4.0/settings.ini
 '
 
-stream_resolution 1920 1080
-wait_layout 1 1920 1080 One 0
+wait_layout 1 "$width" "$height" One 0
 wait_counts 1 0
 
 count=1
@@ -473,22 +454,22 @@ for fixture_mode in second third fourth fifth sixth; do
         fifth) focused=Five ;;
         sixth) focused=Six ;;
     esac
-    wait_layout "$count" 1920 1080 "$focused" 0
+    wait_layout "$count" "$width" "$height" "$focused" 0
     wait_counts "$count" 0
 done
 assert_native_wayland
 
 send_command first dialog
-wait_layout 6 1920 1080 - 1
+wait_layout 6 "$width" "$height" - 1
 wait_counts 6 1
 send_command first dialog-close
-wait_layout 6 1920 1080 - 0
+wait_layout 6 "$width" "$height" - 0
 wait_counts 6 0
 
 send_command first focus
-wait_layout 6 1920 1080 One 0
+wait_layout 6 "$width" "$height" One 0
 send_command fourth focus
-wait_layout 6 1920 1080 Four 0
+wait_layout 6 "$width" "$height" Four 0
 
 pause_layoutd
 labwc_action "Pelagian Fixture Three" FLOAT
@@ -496,27 +477,25 @@ send_command third resize
 wait_disrupted "Pelagian Fixture Three" resize
 send_command fourth focus
 resume_layoutd
-wait_layout 6 1920 1080 Four 0
+wait_layout 6 "$width" "$height" Four 0
 
 pause_layoutd
 send_command fifth fullscreen
 wait_disrupted "Pelagian Fixture Five" fullscreen
 send_command fourth focus
 resume_layoutd
-wait_layout 6 1920 1080 Four 0
+wait_layout 6 "$width" "$height" Four 0
 
 pause_layoutd
 send_command second minimize
 wait_disrupted "Pelagian Fixture Two" minimize
 send_command fourth focus
 resume_layoutd
-wait_layout 6 1920 1080 Four 0
+wait_layout 6 "$width" "$height" Four 0
 
-stream_resolution 1366 768
-wait_layout 6 1366 768 Four 0
 wait_counts 6 0
 restart_layoutd
-wait_layout 6 1366 768 Four 0
+wait_layout 6 "$width" "$height" Four 0
 wait_counts 6 0
 
 count=6
@@ -528,8 +507,8 @@ for fixture_mode in sixth fifth fourth third second; do
         sixth|fifth) focused=Four ;;
         *) focused=any ;;
     esac
-    wait_layout "$count" 1366 768 "$focused" 0
+    wait_layout "$count" "$width" "$height" "$focused" 0
     wait_counts "$count" 0
 done
 
-echo "pelagian-shell smoke: PASS image=$image engine=$engine resolutions=1920x1080,1366x768"
+echo "pelagian-shell smoke: PASS image=$image engine=$engine resolution=${width}x${height}"
