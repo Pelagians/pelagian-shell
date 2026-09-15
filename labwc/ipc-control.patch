@@ -1,0 +1,745 @@
+diff --git a/include/ipc.h b/include/ipc.h
+new file mode 100644
+index 0000000..7be6706
+--- /dev/null
++++ b/include/ipc.h
+@@ -0,0 +1,10 @@
++/* SPDX-License-Identifier: GPL-2.0-only */
++#ifndef LABWC_IPC_H
++#define LABWC_IPC_H
++
++struct server;
++
++void ipc_init(struct server *server);
++void ipc_finish(struct server *server);
++
++#endif /* LABWC_IPC_H */
+diff --git a/include/labwc.h b/include/labwc.h
+index 88860de..9235aa2 100644
+--- a/include/labwc.h
++++ b/include/labwc.h
+@@ -311,6 +311,7 @@ struct server {
+ 	struct sfdo *sfdo;
+ 
+ 	pid_t primary_client_pid;
++	bool ipc;
+ };
+ 
+ void xdg_popup_create(struct view *view, struct wlr_xdg_popup *wlr_popup);
+diff --git a/include/view.h b/include/view.h
+index 7c4a24d..f07df22 100644
+--- a/include/view.h
++++ b/include/view.h
+@@ -180,6 +180,7 @@ struct view {
+ 
+ 	bool mapped;
+ 	bool been_mapped;
++	bool pelagian_managed;
+ 	uint64_t creation_id;
+ 	enum lab_ssd_mode ssd_mode;
+ 	enum ssd_preference ssd_preference;
+diff --git a/src/interactive.c b/src/interactive.c
+index 28f428e..1f14947 100644
+--- a/src/interactive.c
++++ b/src/interactive.c
+@@ -94,6 +94,9 @@ interactive_begin(struct view *view, enum input_mode mode, enum lab_edge edges)
+ 			|| view != server->grabbed_view) {
+ 		return;
+ 	}
++	if (view->pelagian_managed) {
++		return;
++	}
+ 
+ 	/* Prevent moving/resizing fixed-position and panel-like views */
+ 	if (window_rules_get_property(view, "fixedPosition") == LAB_PROP_TRUE
+diff --git a/src/ipc.c b/src/ipc.c
+new file mode 100644
+index 0000000..3bcf31e
+--- /dev/null
++++ b/src/ipc.c
+@@ -0,0 +1,580 @@
++// SPDX-License-Identifier: GPL-2.0-only
++#define _POSIX_C_SOURCE 200809L
++#include "config.h"
++#include <errno.h>
++#include <fcntl.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <strings.h>
++#include <sys/socket.h>
++#include <sys/stat.h>
++#include <sys/un.h>
++#include <unistd.h>
++#include <wlr/util/log.h>
++#include "ipc.h"
++#include "labwc.h"
++#include "output.h"
++#include "regions.h"
++#include "ssd.h"
++#include "view.h"
++
++#define IPC_BUF_SIZE 4096
++#define IPC_CLIENT_TIMEOUT_MS 1000
++#define IPC_MAX_CLIENTS 16
++#define IPC_MAX_RESPONSE_BYTES (1024 * 1024)
++
++static int listen_fd = -1;
++static struct wl_event_source *listen_source;
++static struct server *ipc_server;
++static size_t client_count;
++static char socket_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
++
++struct ipc_client {
++	int fd;
++	struct wl_event_source *source;
++	struct wl_event_source *timer;
++	struct server *server;
++	char buf[IPC_BUF_SIZE];
++	size_t buf_len;
++};
++
++static bool
++ipc_array_append(struct wl_array *out, const void *data, size_t len)
++{
++	if (len > IPC_MAX_RESPONSE_BYTES - out->size) {
++		return false;
++	}
++	void *target = wl_array_add(out, len);
++	if (!target) {
++		return false;
++	}
++	memcpy(target, data, len);
++	return true;
++}
++
++static void
++ipc_client_destroy(struct ipc_client *client)
++{
++	if (client->source) {
++		wl_event_source_remove(client->source);
++	}
++	if (client->timer) {
++		wl_event_source_remove(client->timer);
++	}
++	if (client_count > 0) {
++		client_count--;
++	}
++	close(client->fd);
++	free(client);
++}
++
++static int
++ipc_client_timeout(void *data)
++{
++	struct ipc_client *client = data;
++	struct wl_event_source *timer = client->timer;
++	client->timer = NULL;
++	wl_event_source_remove(timer);
++	ipc_client_destroy(client);
++	return 0;
++}
++
++static void
++json_escape(char *dst, size_t dst_size, const char *src)
++{
++	size_t j = 0;
++	size_t src_len = strlen(src);
++	for (size_t i = 0; i < src_len && j + 1 < dst_size; i++) {
++		unsigned char c = (unsigned char)src[i];
++		const char *escape = NULL;
++		switch (c) {
++		case '\b': escape = "\\b"; break;
++		case '\f': escape = "\\f"; break;
++		case '\n': escape = "\\n"; break;
++		case '\r': escape = "\\r"; break;
++		case '\t': escape = "\\t"; break;
++		case '"': escape = "\\\""; break;
++		case '\\': escape = "\\\\"; break;
++		default: break;
++		}
++		if (escape) {
++			size_t length = strlen(escape);
++			if (j + length >= dst_size) break;
++			memcpy(dst + j, escape, length);
++			j += length;
++		} else if (c < 0x20) {
++			if (j + 6 >= dst_size) break;
++			j += snprintf(dst + j, dst_size - j, "\\u%04x", c);
++		} else if (c >= 0x80) {
++			size_t width;
++			if (c >= 0xc2 && c <= 0xdf) width = 2;
++			else if (c >= 0xe0 && c <= 0xef) width = 3;
++			else if (c >= 0xf0 && c <= 0xf4) width = 4;
++			else break;
++			if (i + width > src_len || j + width >= dst_size) break;
++			for (size_t k = 1; k < width; k++) {
++				if (((unsigned char)src[i + k] & 0xc0) != 0x80) {
++					dst[j] = '\0';
++					return;
++				}
++			}
++			if ((c == 0xe0 && (unsigned char)src[i + 1] < 0xa0)
++				|| (c == 0xed && (unsigned char)src[i + 1] >= 0xa0)
++				|| (c == 0xf0 && (unsigned char)src[i + 1] < 0x90)
++				|| (c == 0xf4 && (unsigned char)src[i + 1] >= 0x90)) break;
++			memcpy(dst + j, src + i, width);
++			j += width;
++			i += width - 1;
++		} else {
++			dst[j++] = (char)c;
++		}
++	}
++	dst[j] = '\0';
++}
++
++static const char *
++decoration_name(enum lab_ssd_mode mode)
++{
++	switch (mode) {
++	case LAB_SSD_MODE_FULL: return "full";
++	case LAB_SSD_MODE_BORDER: return "border";
++	case LAB_SSD_MODE_NONE: return "none";
++	default: return "invalid";
++	}
++}
++
++static bool
++view_to_json(struct wl_array *out, struct view *view, struct server *server)
++{
++	char title_esc[512];
++	char app_id_esc[512];
++	char region_esc[128];
++	pid_t pid = view->impl->get_pid(view);
++	struct view *parent = view->impl->get_parent(view);
++	struct border margin = ssd_get_margin(view->ssd);
++	int outer_x = view->current.x - margin.left;
++	int outer_y = view->current.y - margin.top;
++	int outer_width = view->current.width + margin.left + margin.right;
++	int outer_height = view->current.height + margin.top + margin.bottom;
++	const char *type = "normal";
++	if (parent || view_is_modal_dialog(view)
++			|| view->impl->contains_window_type(view, LAB_WINDOW_TYPE_DIALOG)) {
++		type = "dialog";
++	} else if (view->impl->contains_window_type(view, LAB_WINDOW_TYPE_UTILITY)) {
++		type = "utility";
++	} else if (view->impl->contains_window_type(view, LAB_WINDOW_TYPE_DESKTOP)) {
++		type = "desktop";
++	} else if (view->impl->contains_window_type(view, LAB_WINDOW_TYPE_NORMAL)) {
++		type = "normal";
++	}
++
++	json_escape(title_esc, sizeof(title_esc),
++		view->title ? view->title : "");
++	json_escape(app_id_esc, sizeof(app_id_esc),
++		view->app_id ? view->app_id : "");
++	json_escape(region_esc, sizeof(region_esc),
++		view->tiled_region ? view->tiled_region->name : "");
++
++	char entry[2048];
++	int len = snprintf(entry, sizeof(entry),
++		"{\"id\":%llu,\"pid\":%d,\"type\":\"%s\",\"parent_id\":",
++		(unsigned long long)view->creation_id, (int)pid, type);
++	if (len < 0 || (size_t)len >= sizeof(entry)
++			|| !ipc_array_append(out, entry, len)) {
++		return false;
++	}
++	if (parent) {
++		len = snprintf(entry, sizeof(entry), "%llu,",
++			(unsigned long long)parent->creation_id);
++	} else {
++		len = snprintf(entry, sizeof(entry), "null,");
++	}
++	if (len < 0 || (size_t)len >= sizeof(entry)
++			|| !ipc_array_append(out, entry, len)) {
++		return false;
++	}
++	len = snprintf(entry, sizeof(entry),
++		"\"x\":%d,\"y\":%d,\"width\":%d,\"height\":%d,"
++		"\"client_width\":%d,\"client_height\":%d,"
++		"\"title\":\"%s\",\"app_id\":\"%s\","
++		"\"decoration\":\"%s\",\"titlebar_visible\":%s,"
++		"\"minimized\":%s,\"fullscreen\":%s,"
++		"\"maximized\":%s,\"tiled\":%s,\"region\":\"%s\","
++		"\"focused\":%s}",
++		outer_x, outer_y, outer_width, outer_height,
++		view->current.width, view->current.height,
++		title_esc, app_id_esc,
++		decoration_name(view->ssd_mode),
++		view_titlebar_visible(view) ? "true" : "false",
++		view->minimized ? "true" : "false",
++		view->fullscreen ? "true" : "false",
++		view->maximized != VIEW_AXIS_NONE ? "true" : "false",
++		view->tiled != LAB_EDGE_NONE ? "true" : "false",
++		region_esc,
++		view == server->active_view ? "true" : "false");
++	if (len < 0 || (size_t)len >= sizeof(entry)
++			|| !ipc_array_append(out, entry, len)) {
++		return false;
++	}
++	return true;
++}
++
++static bool
++views_to_json(struct wl_array *out, struct server *server)
++{
++	if (!ipc_array_append(out, "[", 1)) {
++		return false;
++	}
++	bool first = true;
++	struct view *view;
++	wl_list_for_each(view, &server->views, link) {
++		if (!view->mapped) {
++			continue;
++		}
++		if (!first && !ipc_array_append(out, ",", 1)) {
++			return false;
++		}
++		first = false;
++		if (!view_to_json(out, view, server)) {
++			return false;
++		}
++	}
++	return ipc_array_append(out, "]", 1);
++}
++
++static bool
++outputs_to_json(struct wl_array *out, struct server *server)
++{
++	if (!ipc_array_append(out, "[", 1)) {
++		return false;
++	}
++	bool first = true;
++	struct output *output;
++	wl_list_for_each(output, &server->outputs, link) {
++		if (!output_is_usable(output)) {
++			continue;
++		}
++		if (!first && !ipc_array_append(out, ",", 1)) {
++			return false;
++		}
++		first = false;
++		char name[128];
++		json_escape(name, sizeof(name), output->wlr_output->name);
++		char entry[512];
++		int len = snprintf(entry, sizeof(entry),
++			"{\"name\":\"%s\",\"usable_area\":{"
++			"\"x\":%d,\"y\":%d,\"width\":%d,\"height\":%d}}",
++			name, output->usable_area.x, output->usable_area.y,
++			output->usable_area.width, output->usable_area.height);
++		if (len < 0 || (size_t)len >= sizeof(entry)
++				|| !ipc_array_append(out, entry, len)) {
++			return false;
++		}
++	}
++	return ipc_array_append(out, "]", 1);
++}
++
++static struct view *
++view_from_id(struct server *server, const char *id)
++{
++	errno = 0;
++	char *end;
++	unsigned long long parsed = strtoull(id, &end, 10);
++	if (errno || !*id || *end) {
++		return NULL;
++	}
++	struct view *view;
++	wl_list_for_each(view, &server->views, link) {
++		if (view->mapped && view->creation_id == parsed) {
++			return view;
++		}
++	}
++	return NULL;
++}
++
++static const char *
++ipc_run_action(struct server *server, char *cmd)
++{
++	char *saveptr;
++	char *id = strtok_r(cmd, " ", &saveptr);
++	char *action = strtok_r(NULL, " ", &saveptr);
++	char *argument = strtok_r(NULL, " ", &saveptr);
++	char *extra = strtok_r(NULL, " ", &saveptr);
++	struct view *view = id ? view_from_id(server, id) : NULL;
++	if (!view || !action || extra) {
++		return "invalid action";
++	}
++	if (!strcmp(action, "MAXIMIZE") && !argument) {
++		view->pelagian_managed = true;
++		view_minimize(view, false);
++		view_set_fullscreen(view, false);
++		view_maximize(view, VIEW_AXIS_BOTH);
++		return NULL;
++	}
++	if (!strcmp(action, "FLOAT") && !argument) {
++		view->pelagian_managed = false;
++		view_maximize(view, VIEW_AXIS_NONE);
++		view_set_untiled(view);
++		return NULL;
++	}
++	if (!strcmp(action, "SNAP") && argument) {
++		struct region *region = regions_from_name(argument, view->output);
++		if (!region) {
++			return "unknown region";
++		}
++		view->pelagian_managed = true;
++		view_minimize(view, false);
++		view_set_fullscreen(view, false);
++		view_snap_to_region(view, region);
++		return NULL;
++	}
++	if (!strcmp(action, "DECORATION") && argument) {
++		enum lab_ssd_mode mode = LAB_SSD_MODE_INVALID;
++		if (!strcmp(argument, "none")) {
++			mode = LAB_SSD_MODE_NONE;
++		} else if (!strcmp(argument, "border")) {
++			mode = LAB_SSD_MODE_BORDER;
++		} else if (!strcmp(argument, "full")) {
++			mode = LAB_SSD_MODE_FULL;
++		}
++		if (mode == LAB_SSD_MODE_INVALID) {
++			return "unknown decoration";
++		}
++		view_set_decorations(view, mode, true);
++		return NULL;
++	}
++	return "unknown action";
++}
++
++static void
++ipc_respond(int fd, const char *data, size_t len)
++{
++	size_t total = len;
++	const char *ptr = data;
++	while (total > 0) {
++		ssize_t n = send(fd, ptr, total, MSG_NOSIGNAL);
++		if (n < 0 && errno == EINTR) {
++			continue;
++		}
++		if (n <= 0) {
++			break;
++		}
++		ptr += n;
++		total -= n;
++	}
++}
++
++static void
++ipc_handle_command(struct ipc_client *client, char *cmd)
++{
++	struct server *server = client->server;
++	struct wl_array buf;
++	wl_array_init(&buf);
++	bool ok;
++
++	if (!strcmp(cmd, "LIST")) {
++		ok = ipc_array_append(&buf, "{\"views\":", 9)
++			&& views_to_json(&buf, server)
++			&& ipc_array_append(&buf, ",\"outputs\":", 11)
++			&& outputs_to_json(&buf, server)
++			&& ipc_array_append(&buf, "}", 1);
++	} else if (!strncmp(cmd, "ACTION ", 7)) {
++		const char *error = ipc_run_action(server, cmd + 7);
++		const char *response = error
++			? "{\"ok\":false,\"error\":\"invalid action\"}"
++			: "{\"ok\":true}";
++		ok = ipc_array_append(&buf, response, strlen(response));
++	} else {
++		const char *error = "{\"error\":\"unknown command\"}";
++		ok = ipc_array_append(&buf, error, strlen(error));
++	}
++
++	if (!ok) {
++		const char *error = "{\"error\":\"response too large\"}\n";
++		ipc_respond(client->fd, error, strlen(error));
++	} else {
++		ipc_respond(client->fd, buf.data, buf.size);
++		ipc_respond(client->fd, "\n", 1);
++	}
++	wl_array_release(&buf);
++}
++
++static int
++ipc_client_readable(int fd, uint32_t mask, void *data)
++{
++	struct ipc_client *client = data;
++
++	if (mask & WL_EVENT_HANGUP) {
++		ipc_client_destroy(client);
++		return 0;
++	}
++
++	if (mask & WL_EVENT_READABLE) {
++		size_t space = sizeof(client->buf) - client->buf_len - 1;
++		if (space == 0) {
++			ipc_client_destroy(client);
++			return 0;
++		}
++		ssize_t n = read(fd, client->buf + client->buf_len, space);
++		if (n <= 0) {
++			ipc_client_destroy(client);
++			return 0;
++		}
++		client->buf_len += n;
++		client->buf[client->buf_len] = '\0';
++
++		char *newline = strchr(client->buf, '\n');
++		if (newline) {
++			*newline = '\0';
++			ipc_handle_command(client, client->buf);
++			ipc_client_destroy(client);
++		}
++	}
++	return 0;
++}
++
++static int
++ipc_listen_readable(int fd, uint32_t mask, void *data)
++{
++	if (!(mask & WL_EVENT_READABLE)) {
++		return 0;
++	}
++
++	int client_fd = accept(fd, NULL, NULL);
++	if (client_fd < 0) {
++		wlr_log_errno(WLR_ERROR, "ipc: accept");
++		return 0;
++	}
++	if (client_count >= IPC_MAX_CLIENTS) {
++		close(client_fd);
++		return 0;
++	}
++
++	int flags = fcntl(client_fd, F_GETFL, 0);
++	if (flags < 0 || fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
++		close(client_fd);
++		return 0;
++	}
++
++	struct ipc_client *client = calloc(1, sizeof(*client));
++	if (!client) {
++		close(client_fd);
++		return 0;
++	}
++	client->fd = client_fd;
++	client->server = ipc_server;
++	client_count++;
++	client->source = wl_event_loop_add_fd(
++		ipc_server->wl_event_loop, client_fd,
++		WL_EVENT_READABLE | WL_EVENT_HANGUP,
++		ipc_client_readable, client);
++	client->timer = wl_event_loop_add_timer(
++		ipc_server->wl_event_loop, ipc_client_timeout, client);
++	if (!client->source || !client->timer
++			|| wl_event_source_timer_update(client->timer,
++				IPC_CLIENT_TIMEOUT_MS) < 0) {
++		ipc_client_destroy(client);
++	}
++
++	return 0;
++}
++
++void
++ipc_init(struct server *server)
++{
++	ipc_server = server;
++
++	const char *runtime = getenv("XDG_RUNTIME_DIR");
++	if (!runtime) {
++		wlr_log(WLR_ERROR, "ipc: XDG_RUNTIME_DIR not set");
++		return;
++	}
++
++	int path_len = snprintf(socket_path, sizeof(socket_path),
++		"%s/labwc.sock", runtime);
++	if (path_len < 0 || (size_t)path_len >= sizeof(socket_path)) {
++		wlr_log(WLR_ERROR, "ipc: socket path is too long");
++		return;
++	}
++	struct stat existing;
++	if (lstat(socket_path, &existing) == 0) {
++		if (!S_ISSOCK(existing.st_mode) || existing.st_uid != geteuid()) {
++			wlr_log(WLR_ERROR, "ipc: refusing to replace %s", socket_path);
++			return;
++		}
++		if (unlink(socket_path) < 0) {
++			wlr_log_errno(WLR_ERROR, "ipc: unlink %s", socket_path);
++			return;
++		}
++	} else if (errno != ENOENT) {
++		wlr_log_errno(WLR_ERROR, "ipc: lstat %s", socket_path);
++		return;
++	}
++
++	struct sockaddr_un addr;
++	memset(&addr, 0, sizeof(addr));
++	addr.sun_family = AF_UNIX;
++	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
++
++	listen_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
++	if (listen_fd < 0) {
++		wlr_log_errno(WLR_ERROR, "ipc: socket");
++		return;
++	}
++
++	if (bind(listen_fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
++		wlr_log_errno(WLR_ERROR, "ipc: bind %s", socket_path);
++		close(listen_fd);
++		listen_fd = -1;
++		socket_path[0] = '\0';
++		return;
++	}
++	if (chmod(socket_path, 0600) < 0) {
++		wlr_log_errno(WLR_ERROR, "ipc: chmod %s", socket_path);
++		close(listen_fd);
++		listen_fd = -1;
++		unlink(socket_path);
++		socket_path[0] = '\0';
++		return;
++	}
++
++	if (listen(listen_fd, 5) < 0) {
++		wlr_log_errno(WLR_ERROR, "ipc: listen");
++		close(listen_fd);
++		listen_fd = -1;
++		unlink(socket_path);
++		socket_path[0] = '\0';
++		return;
++	}
++
++	listen_source = wl_event_loop_add_fd(
++		server->wl_event_loop, listen_fd,
++		WL_EVENT_READABLE, ipc_listen_readable, NULL);
++	if (!listen_source) {
++		close(listen_fd);
++		listen_fd = -1;
++		unlink(socket_path);
++		socket_path[0] = '\0';
++		return;
++	}
++
++	wlr_log(WLR_INFO, "ipc: listening on %s", socket_path);
++}
++
++void
++ipc_finish(struct server *server)
++{
++	if (listen_source) {
++		wl_event_source_remove(listen_source);
++		listen_source = NULL;
++	}
++	if (listen_fd >= 0) {
++		close(listen_fd);
++		listen_fd = -1;
++	}
++	if (socket_path[0]) {
++		unlink(socket_path);
++		socket_path[0] = '\0';
++	}
++}
+diff --git a/src/main.c b/src/main.c
+index 755a0a0..14cc6a6 100644
+--- a/src/main.c
++++ b/src/main.c
+@@ -9,6 +9,7 @@
+ #include "common/spawn.h"
+ #include "config/rcxml.h"
+ #include "config/session.h"
++#include "ipc.h"
+ #include "labwc.h"
+ #include "theme.h"
+ #include "translate.h"
+@@ -22,6 +23,7 @@ static const struct option long_options[] = {
+ 	{"debug", no_argument, NULL, 'd'},
+ 	{"exit", no_argument, NULL, 'e'},
+ 	{"help", no_argument, NULL, 'h'},
++	{"ipc", no_argument, NULL, 'i'},
+ 	{"merge-config", no_argument, NULL, 'm'},
+ 	{"reconfigure", no_argument, NULL, 'r'},
+ 	{"startup", required_argument, NULL, 's'},
+@@ -38,6 +40,7 @@ static const char labwc_usage[] =
+ "  -d, --debug              Enable full logging, including debug information\n"
+ "  -e, --exit               Exit the compositor\n"
+ "  -h, --help               Show help message and quit\n"
++"  -i, --ipc                Enable IPC socket at $XDG_RUNTIME_DIR/labwc.sock\n"
+ "  -m, --merge-config       Merge user config files/theme in all XDG Base Dirs\n"
+ "  -r, --reconfigure        Reload the compositor configuration\n"
+ "  -s, --startup <command>  Run command on startup\n"
+@@ -154,12 +157,13 @@ main(int argc, char *argv[])
+ {
+ 	char *startup_cmd = NULL;
+ 	char *primary_client = NULL;
++	bool ipc_enabled = false;
+ 	enum wlr_log_importance verbosity = WLR_ERROR;
+ 
+ 	int c;
+ 	while (1) {
+ 		int index = 0;
+-		c = getopt_long(argc, argv, "c:C:dehmrs:S:vV", long_options, &index);
++		c = getopt_long(argc, argv, "c:C:dehimrs:S:vV", long_options, &index);
+ 		if (c == -1) {
+ 			break;
+ 		}
+@@ -194,6 +198,9 @@ main(int argc, char *argv[])
+ 		case 'V':
+ 			verbosity = WLR_INFO;
+ 			break;
++		case 'i':
++			ipc_enabled = true;
++			break;
+ 		case 'h':
+ 		default:
+ 			usage();
+@@ -247,6 +254,7 @@ main(int argc, char *argv[])
+ 	increase_nofile_limit();
+ 
+ 	struct server server = { 0 };
++	server.ipc = ipc_enabled;
+ 	server_init(&server);
+ 	server_start(&server);
+ 
+diff --git a/src/meson.build b/src/meson.build
+index a9afdc4..65dbde3 100644
+--- a/src/meson.build
++++ b/src/meson.build
+@@ -7,6 +7,7 @@ labwc_sources = files(
+   'edges.c',
+   'idle.c',
+   'interactive.c',
++  'ipc.c',
+   'layers.c',
+   'magnifier.c',
+   'main.c',
+diff --git a/src/server.c b/src/server.c
+index b8abc63..e7559ec 100644
+--- a/src/server.c
++++ b/src/server.c
+@@ -52,6 +52,7 @@
+ #include "desktop-entry.h"
+ #include "idle.h"
+ #include "input/keyboard.h"
++#include "ipc.h"
+ #include "labwc.h"
+ #include "layers.h"
+ #include "magnifier.h"
+@@ -729,6 +730,10 @@ server_init(struct server *server)
+ #if HAVE_XWAYLAND
+ 	xwayland_server_init(server, server->compositor);
+ #endif
++
++	if (server->ipc) {
++		ipc_init(server);
++	}
+ }
+ 
+ void
+@@ -763,6 +768,8 @@ server_start(struct server *server)
+ void
+ server_finish(struct server *server)
+ {
++	ipc_finish(server);
++
+ #if HAVE_XWAYLAND
+ 	xwayland_server_finish(server);
+ #endif

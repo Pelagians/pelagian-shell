@@ -8,8 +8,8 @@ dialogs = "floating"
 max_managed_windows = 6
 
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 
 [theme]

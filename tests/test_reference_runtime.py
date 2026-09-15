@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import subprocess
+import tomllib
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -28,10 +29,12 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             containerfile,
         )
         self.assertIn("COPY session/autostart_wayland /defaults/autostart_wayland", containerfile)
+        self.assertIn("COPY session/startwm_wayland.sh /defaults/startwm_wayland.sh", containerfile)
+        startwm = (ROOT / "session/startwm_wayland.sh").read_text(encoding="utf-8")
+        self.assertIn("exec labwc -i", startwm)
         self.assertIn("/init", (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8"))
-        self.assertNotIn("labwc -i", containerfile)
 
-    def test_labwc_regions_cover_every_current_planner_region(self) -> None:
+    def test_labwc_regions_and_minimal_single_workspace_policy(self) -> None:
         root = ET.parse(ROOT / "labwc/rc.xml").getroot()
         regions = {region.attrib["name"] for region in root.findall("./regions/region")}
         expected = {
@@ -58,11 +61,75 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         }
         self.assertEqual(expected, regions)
         self.assertEqual("2", root.findtext("./theme/cornerRadius"))
-        self.assertEqual("none", root.findtext("./theme/maximizedDecoration"))
-        normal_rule = root.find("./windowRules/windowRule")
-        if normal_rule is None:
-            self.fail("the generic normal window rule is missing")
-        self.assertEqual("no", normal_rule.attrib["serverDecoration"])
+        self.assertEqual(":close", root.findtext("./theme/titlebar/layout"))
+        self.assertEqual("yes", root.findtext("./theme/titlebar/showTitle"))
+        self.assertEqual("titlebar", root.findtext("./theme/maximizedDecoration"))
+
+        self.assertEqual(
+            ["Workspace 1"],
+            [name.text for name in root.findall("./desktops/names/name")],
+        )
+        self.assertEqual("Workspace 1", root.findtext("./desktops/initial"))
+
+        keyboard = root.find("./keyboard")
+        mouse = root.find("./mouse")
+        if keyboard is None or mouse is None:
+            self.fail("explicit keyboard and mouse policy is required")
+        self.assertIsNone(keyboard.find("./default"))
+        self.assertIsNone(mouse.find("./default"))
+        self.assertEqual(
+            {"A-Tab", "A-S-Tab", "A-F4", "W-Return"},
+            {binding.attrib["key"] for binding in keyboard.findall("./keybind")},
+        )
+        key_actions = {
+            action.attrib["name"]
+            for action in keyboard.findall(".//action")
+        }
+        self.assertEqual(
+            {"NextWindow", "PreviousWindow", "Close", "Execute"}, key_actions
+        )
+        mouse_actions = {
+            action.attrib["name"] for action in mouse.findall(".//action")
+        }
+        self.assertEqual({"Focus", "Raise", "Close", "Move", "Resize"}, mouse_actions)
+        drag_actions = {
+            (context.attrib["name"], binding.attrib["button"], action.attrib["name"])
+            for context in mouse.findall("./context")
+            for binding in context.findall("./mousebind")
+            if binding.attrib.get("action") == "Drag"
+            for action in binding.findall("./action")
+        }
+        self.assertEqual(
+            {("Title", "Left", "Move"), ("Border", "Left", "Resize")},
+            drag_actions,
+        )
+
+        rules = root.findall("./windowRules/windowRule")
+        self.assertFalse(
+            any(
+                rule.attrib.get("type") == "normal"
+                and rule.attrib.get("serverDecoration") == "no"
+                for rule in rules
+            )
+        )
+
+    def test_default_decorations_are_full_and_gtk_is_close_only(self) -> None:
+        defaults = tomllib.loads(
+            (ROOT / "config/defaults.toml").read_text(encoding="utf-8")
+        )
+        self.assertEqual(
+            {"solo": "full", "tiled": "full", "floating": "full"},
+            defaults["decorations"],
+        )
+        self.assertFalse(
+            any("title" in rule for rule in defaults.get("window_rules", [])),
+            "default floating classification must use compositor type/parent, not title guesses",
+        )
+        for version in ("gtk-3.0", "gtk-4.0"):
+            settings = (
+                ROOT / f"theme/{version}/settings.ini"
+            ).read_text(encoding="utf-8")
+            self.assertIn("gtk-decoration-layout=:close", settings)
 
     def test_session_scripts_are_posix_parseable_and_refresh_shell_owned_files(self) -> None:
         for relative in (
@@ -107,15 +174,26 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
     def test_docs_and_ci_expose_the_real_runtime_gate(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         workflow = ROOT / ".github/workflows/ci.yml"
+        runtime_docs = (ROOT / "docs/reference-runtime.md").read_text(encoding="utf-8")
 
         self.assertIn("docs/reference-runtime.md", readme)
         self.assertTrue(workflow.is_file())
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("make check", workflow_text)
         self.assertIn("make container-smoke", workflow_text)
+        self.assertIn("rootless-podman", workflow_text)
+        self.assertIn("ENGINE=podman make container-smoke", workflow_text)
+        self.assertIn("one through six normal windows", runtime_docs)
+        self.assertIn("a transient dialog floats", runtime_docs)
+
         smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
-        self.assertIn("pelagian-shellctl status", smoke)
-        self.assertIn("pelagian-shellctl config show", smoke)
+        self.assertIn("stream_resolution 1920 1080", smoke)
+        self.assertIn("stream_resolution 1366 768", smoke)
+        self.assertIn("assert_native_wayland", smoke)
+        self.assertIn("'\"layoutd\":\"healthy\"'", smoke)
+        self.assertIn("'\"adapter_connected\":true'", smoke)
+        self.assertIn("'\"reconciliation\":\"healthy\"'", smoke)
+        self.assertNotIn("'\"layoutd\":\"running\"'", smoke)
 
     def test_readme_states_the_v0_1_0_boundary(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -126,19 +204,22 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             "strict profiles/drop-ins",
             "optional Wine appearance capability",
             "deterministic layout planner",
-            "compositor adapter seam",
-            "planner-only layoutd",
+            "live Labwc compositor adapter",
+            "daemonized layoutd",
             "shellctl/status/config tooling",
         ):
             self.assertIn(capability, readme)
-        self.assertIn("does not yet provide live automatic tiling", readme)
+        self.assertIn("live automatic tiling", readme)
+        self.assertNotIn("planner-only", readme)
 
-    def test_configuration_docs_separate_operative_and_planned_behavior(self) -> None:
+    def test_configuration_docs_describe_operative_behavior(self) -> None:
         configuration = (ROOT / "docs/configuration.md").read_text(encoding="utf-8")
         schema = (ROOT / "crates/shellctl/src/lib.rs").read_text(encoding="utf-8")
 
         self.assertIn("## Operative in v0.1.0", configuration)
-        self.assertIn("## Resolved but not dynamically applied in v0.1.0", configuration)
+        self.assertNotIn("Resolved but not dynamically applied", configuration)
+        self.assertIn("Layoutd reapplies full decoration", configuration)
+        self.assertIn("Floating views retain titlebar drag and border resize", configuration)
         for field in (
             "layout.mode",
             "decorations.solo",
@@ -147,10 +228,10 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             "window_rules",
         ):
             self.assertIn(field, configuration)
-        self.assertIn("planner_only", configuration)
-        self.assertIn("compositor_adapter = unavailable", configuration)
-        self.assertIn("does not dynamically maximize one window", configuration)
-        self.assertIn("tile multiple windows", configuration)
+        self.assertNotIn("planner_only", configuration)
+        self.assertIn("compositor_adapter = labwc-ipc", configuration)
+        self.assertIn("maximizes one window", configuration)
+        self.assertIn("tiles multiple windows", configuration)
         self.assertIn('theme.variant = "dark"', configuration)
         self.assertIn("`light` is rejected", configuration)
         self.assertNotIn("Light,", schema)
@@ -177,6 +258,14 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("provenance: mode=max", workflow)
         self.assertIn("sbom: true", workflow)
         self.assertIn("make container-smoke", workflow)
+        self.assertIn('docker pull "$reference"', workflow)
+        self.assertIn(
+            'ENGINE=docker sh tests/container-smoke.sh "$reference"', workflow
+        )
+        self.assertLess(
+            workflow.index('docker pull "$reference"'),
+            workflow.index('ENGINE=docker sh tests/container-smoke.sh "$reference"'),
+        )
         self.assertIn("packages: write", workflow)
         self.assertIn(
             '{{ index .Config.Labels "org.opencontainers.image.revision" }}', workflow

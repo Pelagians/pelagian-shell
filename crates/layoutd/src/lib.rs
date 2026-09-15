@@ -1,4 +1,10 @@
-//! Deterministic, compositor-independent workspace model and layout planner.
+//! Layout policy and live Labwc adapter for Pelagian Shell.
+
+mod labwc;
+mod runtime;
+
+pub use labwc::{AdapterError, LabwcIpcAdapter};
+pub use runtime::{RuntimeSettings, runtime_status_json, write_runtime_state};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Output {
@@ -66,6 +72,7 @@ pub struct WindowRule {
 pub enum ToplevelEvent {
     Upsert(Toplevel),
     Remove { id: String },
+    Reconcile,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -86,6 +93,7 @@ impl Workspace {
         match event {
             ToplevelEvent::Upsert(toplevel) => self.upsert(toplevel),
             ToplevelEvent::Remove { id } => self.remove(&id),
+            ToplevelEvent::Reconcile => {}
         }
     }
 
@@ -187,16 +195,40 @@ pub trait CompositorAdapter {
 pub fn reconcile_commands(placements: &[Placement]) -> Vec<CompositorCommand> {
     placements
         .iter()
-        .map(|placement| match &placement.request {
-            LayoutRequest::Maximize => CompositorCommand::Maximize {
-                toplevel_id: placement.id.clone(),
-            },
-            LayoutRequest::Snap { region } => CompositorCommand::Snap {
-                toplevel_id: placement.id.clone(),
-                region: region.clone(),
-            },
+        .flat_map(|placement| {
+            [
+                CompositorCommand::SetDecoration {
+                    toplevel_id: placement.id.clone(),
+                    decoration: DecorationState::Full,
+                },
+                match &placement.request {
+                    LayoutRequest::Maximize => CompositorCommand::Maximize {
+                        toplevel_id: placement.id.clone(),
+                    },
+                    LayoutRequest::Snap { region } => CompositorCommand::Snap {
+                        toplevel_id: placement.id.clone(),
+                        region: region.clone(),
+                    },
+                },
+            ]
         })
         .collect()
+}
+
+pub fn reconcile_workspace_commands(plan: &WorkspacePlan) -> Vec<CompositorCommand> {
+    let mut commands = reconcile_commands(&plan.placements);
+    commands.extend(plan.floating.iter().flat_map(|toplevel_id| {
+        [
+            CompositorCommand::SetDecoration {
+                toplevel_id: toplevel_id.clone(),
+                decoration: DecorationState::Full,
+            },
+            CompositorCommand::Unsnap {
+                toplevel_id: toplevel_id.clone(),
+            },
+        ]
+    }));
+    commands
 }
 
 pub fn classify_toplevel(toplevel: &Toplevel, rules: &[WindowRule]) -> Classification {

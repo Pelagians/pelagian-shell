@@ -1,8 +1,8 @@
 use std::convert::Infallible;
 
 use pelagian_layoutd::{
-    CompositorAdapter, CompositorCommand, LayoutRequest, Output, ToplevelEvent, plan,
-    reconcile_commands,
+    CompositorAdapter, CompositorCommand, LayoutRequest, Output, ToplevelEvent, WorkspacePlan,
+    plan, reconcile_commands, reconcile_workspace_commands,
 };
 
 #[derive(Default)]
@@ -41,9 +41,17 @@ fn planner_requests_are_translated_to_small_explicit_compositor_commands() {
     assert_eq!(
         commands,
         vec![
+            CompositorCommand::SetDecoration {
+                toplevel_id: "left".into(),
+                decoration: pelagian_layoutd::DecorationState::Full,
+            },
             CompositorCommand::Snap {
                 toplevel_id: "left".into(),
                 region: "auto-2-left".into(),
+            },
+            CompositorCommand::SetDecoration {
+                toplevel_id: "right".into(),
+                decoration: pelagian_layoutd::DecorationState::Full,
             },
             CompositorCommand::Snap {
                 toplevel_id: "right".into(),
@@ -56,4 +64,32 @@ fn planner_requests_are_translated_to_small_explicit_compositor_commands() {
     adapter.apply_commands(&commands).unwrap();
     assert_eq!(adapter.applied, commands);
     assert_eq!(adapter.observe_toplevel().unwrap(), None);
+}
+
+#[test]
+fn workspace_reconciliation_floats_nonmanaged_windows() {
+    let commands = reconcile_workspace_commands(&WorkspacePlan {
+        placements: vec![],
+        floating: vec!["dialog".into(), "overflow".into()],
+        ignored: vec![],
+    });
+    assert_eq!(
+        commands,
+        vec![
+            CompositorCommand::SetDecoration {
+                toplevel_id: "dialog".into(),
+                decoration: pelagian_layoutd::DecorationState::Full,
+            },
+            CompositorCommand::Unsnap {
+                toplevel_id: "dialog".into(),
+            },
+            CompositorCommand::SetDecoration {
+                toplevel_id: "overflow".into(),
+                decoration: pelagian_layoutd::DecorationState::Full,
+            },
+            CompositorCommand::Unsnap {
+                toplevel_id: "overflow".into(),
+            },
+        ]
+    );
 }

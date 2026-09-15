@@ -7,11 +7,27 @@ if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
     : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
 fi
 
+layoutd=/usr/local/bin/pelagian-layoutd
 consumer_hook=/usr/local/bin/pelagian-shell-consumer
-if [ -x "$consumer_hook" ]; then
-    state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+if [ -x "$layoutd" ] || [ -x "$consumer_hook" ]; then
     umask 077
     mkdir -p "$state_dir"
+fi
+
+if [ -x "$layoutd" ]; then
+    rm -f "$state_dir/layoutd.exit"
+    (
+        set +e
+        "$layoutd" >> "$state_dir/layoutd.log" 2>&1 &
+        layoutd_pid=$!
+        printf '%s\n' "$layoutd_pid" > "$state_dir/layoutd.pid"
+        wait "$layoutd_pid"
+        printf '%s\n' "$?" > "$state_dir/layoutd.exit"
+    ) &
+fi
+
+if [ -x "$consumer_hook" ]; then
     rm -f "$state_dir/consumer.status"
     (
         set +e
@@ -22,6 +38,3 @@ if [ -x "$consumer_hook" ]; then
         printf '%s\n' "$?" > "$state_dir/consumer.status"
     ) &
 fi
-
-# pelagian-layoutd is intentionally not started: no supported compositor adapter
-# exists yet, and a planner-only daemon must not claim it controls windows.

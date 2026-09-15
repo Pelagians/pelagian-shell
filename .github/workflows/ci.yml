@@ -28,3 +28,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Build and smoke-test the reference Selkies/Labwc image
         run: make container-smoke
+
+  rootless-podman:
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install rootless Podman
+        run: sudo apt-get update && sudo apt-get install --yes podman uidmap slirp4netns fuse-overlayfs
+      - name: Prove rootless execution
+        run: |
+          test "$(id -u)" -ne 0
+          podman info
+      - name: Build and smoke-test without privileges
+        run: ENGINE=podman make container-smoke

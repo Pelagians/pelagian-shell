@@ -8,12 +8,12 @@
   <theme>
     <name>Pelagian Shell</name>
     <titlebar>
-      <layout>close</layout>
+      <layout>:close</layout>
       <showTitle>yes</showTitle>
     </titlebar>
     <cornerRadius>2</cornerRadius>
     <keepBorder>yes</keepBorder>
-    <maximizedDecoration>none</maximizedDecoration>
+    <maximizedDecoration>titlebar</maximizedDecoration>
     <dropShadows>no</dropShadows>
     <dropShadowsOnTiled>no</dropShadowsOnTiled>
   </theme>
@@ -21,6 +21,53 @@
   <placement>
     <policy>cascade</policy>
   </placement>
+
+  <desktops>
+    <popupTime>0</popupTime>
+    <initial>Workspace 1</initial>
+    <names>
+      <name>Workspace 1</name>
+    </names>
+  </desktops>
+
+  <keyboard>
+    <keybind key="A-Tab"><action name="NextWindow" /></keybind>
+    <keybind key="A-S-Tab"><action name="PreviousWindow" /></keybind>
+    <keybind key="A-F4"><action name="Close" /></keybind>
+    <keybind key="W-Return">
+      <action name="Execute" command="lab-sensible-terminal" />
+    </keybind>
+  </keyboard>
+
+  <mouse>
+    <context name="Client">
+      <mousebind button="Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+    </context>
+    <context name="TitleBar">
+      <mousebind button="Left" action="Press">
+        <action name="Focus" />
+        <action name="Raise" />
+      </mousebind>
+    </context>
+    <context name="Title">
+      <mousebind button="Left" action="Drag">
+        <action name="Move" />
+      </mousebind>
+    </context>
+    <context name="Border">
+      <mousebind button="Left" action="Drag">
+        <action name="Resize" />
+      </mousebind>
+    </context>
+    <context name="Close">
+      <mousebind button="Left" action="Click">
+        <action name="Close" />
+      </mousebind>
+    </context>
+  </mouse>
 
   <regions>
     <region name="auto-2-left" x="0%" y="0%" width="50%" height="100%" />
@@ -46,7 +93,6 @@
   </regions>
 
   <windowRules>
-    <windowRule identifier="*" type="normal" serverDecoration="no" />
     <windowRule type="dialog" serverDecoration="yes">
       <action name="UnMaximize" />
       <action name="Raise" />
