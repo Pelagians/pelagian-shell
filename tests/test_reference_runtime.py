@@ -197,6 +197,12 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         workflow_text = workflow.read_text(encoding="utf-8")
         self.assertIn("make check", workflow_text)
         self.assertIn("make container-smoke", workflow_text)
+        self.assertEqual(
+            3,
+            workflow_text.count(
+                "ref: ${{ github.event.pull_request.head.sha || github.sha }}"
+            ),
+        )
         self.assertIn("rootless-podman", workflow_text)
         self.assertIn("ENGINE=podman make container-smoke", workflow_text)
         self.assertIn("one through six normal windows", runtime_docs)

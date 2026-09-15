@@ -420,8 +420,11 @@ mount_mode=ro
 ready=
 attempt=0
 while [ "$attempt" -lt 60 ]; do
+    status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
     if "$engine" exec "$name" pgrep -x labwc >/dev/null 2>&1 \
-        && "$engine" exec "$name" pgrep -x pelagian-layoutd >/dev/null 2>&1 \
+        && printf '%s\n' "$status" | python3 -c \
+            'import json, sys; state=json.load(sys.stdin); assert state["layoutd"] == "healthy" and state["adapter_connected"] and state["reconciliation"] == "healthy"' \
+            2>/dev/null \
         && "$engine" exec "$name" test -f "$sentinel" \
         && curl --fail --silent --show-error --insecure --max-time 3 \
             "https://127.0.0.1:${port}/" >/dev/null 2>&1; then

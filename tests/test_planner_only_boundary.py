@@ -21,7 +21,8 @@ class LiveRuntimeBoundaryTests(unittest.TestCase):
         smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
         shellctl = (ROOT / "crates/shellctl/src/main.rs").read_text(encoding="utf-8")
 
-        self.assertIn("pgrep -x pelagian-layoutd", smoke)
+        self.assertNotIn("pgrep -x pelagian-layoutd", smoke)
+        self.assertIn('state["layoutd"] == "healthy"', smoke)
         self.assertIn("planner_only", smoke)
         self.assertRegex(smoke, r"grep\s+-q.*planner_only")
         self.assertNotIn("planner_only", shellctl)

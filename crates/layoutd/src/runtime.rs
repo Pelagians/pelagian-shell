@@ -1,8 +1,9 @@
 use std::env;
 use std::fs::{self, OpenOptions};
-use std::io::Write;
+use std::io::{self, Write};
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use pelagian_shellctl::{Config, LayoutMode, WindowDisposition};
 use serde::{Deserialize, Serialize};
@@ -111,14 +112,38 @@ pub fn write_runtime_state(
     result
 }
 
+fn cmdline_executable(cmdline: &[u8]) -> Option<PathBuf> {
+    let end = cmdline.iter().position(|byte| *byte == 0)?;
+    (end > 0).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(&cmdline[..end])))
+}
+
+fn process_matches_layoutd(
+    expected: &Path,
+    executable: io::Result<PathBuf>,
+    cmdline: impl FnOnce() -> io::Result<Vec<u8>>,
+) -> bool {
+    match executable {
+        Ok(path) => fs::canonicalize(path).is_ok_and(|actual| actual == expected),
+        Err(error) if error.kind() == io::ErrorKind::PermissionDenied => cmdline()
+            .ok()
+            .as_deref()
+            .and_then(cmdline_executable)
+            .and_then(|path| fs::canonicalize(path).ok())
+            .is_some_and(|actual| actual == expected),
+        Err(_) => false,
+    }
+}
+
 fn process_is_layoutd(pid: u32) -> bool {
-    let expected = env::current_exe()
+    let Some(expected) = env::current_exe()
         .ok()
-        .and_then(|path| fs::canonicalize(path).ok());
-    let actual = fs::read_link(format!("/proc/{pid}/exe"))
-        .ok()
-        .and_then(|path| fs::canonicalize(path).ok());
-    expected.is_some() && expected == actual
+        .and_then(|path| fs::canonicalize(path).ok())
+    else {
+        return false;
+    };
+    process_matches_layoutd(&expected, fs::read_link(format!("/proc/{pid}/exe")), || {
+        fs::read(format!("/proc/{pid}/cmdline"))
+    })
 }
 
 pub fn runtime_status_json() -> String {
@@ -156,4 +181,34 @@ pub fn runtime_status_json() -> String {
         last_error: state.and_then(|state| state.last_error),
     };
     serde_json::to_string(&status).expect("serializing fixed runtime status cannot fail")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::process_matches_layoutd;
+    use std::io;
+    use std::os::unix::ffi::OsStrExt;
+
+    #[test]
+    fn cmdline_fallback_is_permission_only() {
+        let expected = std::fs::canonicalize(std::env::current_exe().unwrap()).unwrap();
+        let mut cmdline = expected.as_os_str().as_bytes().to_vec();
+        cmdline.push(0);
+
+        assert!(!process_matches_layoutd(
+            &expected,
+            Ok("/bin/sh".into()),
+            || Ok(cmdline.clone())
+        ));
+        assert!(process_matches_layoutd(
+            &expected,
+            Err(io::Error::from(io::ErrorKind::PermissionDenied)),
+            || Ok(cmdline.clone())
+        ));
+        assert!(!process_matches_layoutd(
+            &expected,
+            Err(io::Error::from(io::ErrorKind::NotFound)),
+            || Ok(cmdline)
+        ));
+    }
 }
