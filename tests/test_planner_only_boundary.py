@@ -36,11 +36,37 @@ class LiveRuntimeBoundaryTests(unittest.TestCase):
         self.assertIn("IPC_MAX_CLIENTS", ipc_patch)
         self.assertIn("IPC_MAX_RESPONSE_BYTES", ipc_patch)
         self.assertIn("ipc_array_append", ipc_patch)
-        self.assertIn("send(fd, ptr, total, MSG_NOSIGNAL)", ipc_patch)
+        self.assertIn("send(client->fd,", ipc_patch)
+        self.assertIn("MSG_NOSIGNAL", ipc_patch)
+        self.assertIn("WL_EVENT_WRITABLE", ipc_patch)
+        self.assertIn("wl_event_source_fd_update", ipc_patch)
+        self.assertIn("response_offset", ipc_patch)
+        self.assertIn("FD_CLOEXEC", ipc_patch)
+        self.assertIn("SOCK_CLOEXEC", ipc_patch)
+        self.assertIn("connect(probe_fd", ipc_patch)
+        self.assertIn("static bool socket_owned;", ipc_patch)
+        self.assertIn("if (socket_owned)", ipc_patch)
+        self.assertEqual(
+            1,
+            ipc_patch.count("wl_event_source_timer_update(client->timer,"),
+            "the one-second client deadline must not restart after parsing",
+        )
+        self.assertIn('#include "common/border.h"', ipc_patch)
         for command in ("GET_WINDOWS", "GET_STATE", "GET_WINDOW_BY_PID", "GET_FOCUSED_WINDOW"):
             self.assertNotIn(command, ipc_patch)
         self.assertIn("view_minimize(view, false)", ipc_patch)
         self.assertIn("view_set_fullscreen(view, false)", ipc_patch)
+
+        adapter = (ROOT / "crates/layoutd/src/labwc.rs").read_text(encoding="utf-8")
+        self.assertIn("connect_timeout", adapter)
+        self.assertLess(
+            adapter.index("let deadline = Instant::now() + IPC_TIMEOUT;"),
+            adapter.index(".connect_timeout(&address,"),
+        )
+        self.assertIn("connect_timeout(&address, remaining)", adapter)
+        self.assertIn("set_write_timeout(Some(remaining))", adapter)
+        self.assertNotIn("UnixStream::connect(&self.socket)", adapter)
+        self.assertNotIn('PathBuf::from("/tmp")', adapter)
 
 
 if __name__ == "__main__":

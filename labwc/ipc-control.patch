@@ -54,10 +54,10 @@ index 28f428e..1f14947 100644
  	if (window_rules_get_property(view, "fixedPosition") == LAB_PROP_TRUE
 diff --git a/src/ipc.c b/src/ipc.c
 new file mode 100644
-index 0000000..3bcf31e
+index 0000000..41eb20d
 --- /dev/null
 +++ b/src/ipc.c
-@@ -0,0 +1,580 @@
+@@ -0,0 +1,619 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#define _POSIX_C_SOURCE 200809L
 +#include "config.h"
@@ -72,6 +72,7 @@ index 0000000..3bcf31e
 +#include <sys/un.h>
 +#include <unistd.h>
 +#include <wlr/util/log.h>
++#include "common/border.h"
 +#include "ipc.h"
 +#include "labwc.h"
 +#include "output.h"
@@ -89,6 +90,7 @@ index 0000000..3bcf31e
 +static struct server *ipc_server;
 +static size_t client_count;
 +static char socket_path[sizeof(((struct sockaddr_un *)0)->sun_path)];
++static bool socket_owned;
 +
 +struct ipc_client {
 +	int fd;
@@ -97,6 +99,8 @@ index 0000000..3bcf31e
 +	struct server *server;
 +	char buf[IPC_BUF_SIZE];
 +	size_t buf_len;
++	struct wl_array response;
++	size_t response_offset;
 +};
 +
 +static bool
@@ -125,6 +129,7 @@ index 0000000..3bcf31e
 +	if (client_count > 0) {
 +		client_count--;
 +	}
++	wl_array_release(&client->response);
 +	close(client->fd);
 +	free(client);
 +}
@@ -389,6 +394,10 @@ index 0000000..3bcf31e
 +		view_snap_to_region(view, region);
 +		return NULL;
 +	}
++	if (!strcmp(action, "UNMANAGE") && !argument) {
++		view->pelagian_managed = false;
++		return NULL;
++	}
 +	if (!strcmp(action, "DECORATION") && argument) {
 +		enum lab_ssd_mode mode = LAB_SSD_MODE_INVALID;
 +		if (!strcmp(argument, "none")) {
@@ -407,61 +416,45 @@ index 0000000..3bcf31e
 +	return "unknown action";
 +}
 +
-+static void
-+ipc_respond(int fd, const char *data, size_t len)
-+{
-+	size_t total = len;
-+	const char *ptr = data;
-+	while (total > 0) {
-+		ssize_t n = send(fd, ptr, total, MSG_NOSIGNAL);
-+		if (n < 0 && errno == EINTR) {
-+			continue;
-+		}
-+		if (n <= 0) {
-+			break;
-+		}
-+		ptr += n;
-+		total -= n;
-+	}
-+}
-+
-+static void
++static bool
 +ipc_handle_command(struct ipc_client *client, char *cmd)
 +{
 +	struct server *server = client->server;
-+	struct wl_array buf;
-+	wl_array_init(&buf);
++	struct wl_array *buf = &client->response;
 +	bool ok;
 +
 +	if (!strcmp(cmd, "LIST")) {
-+		ok = ipc_array_append(&buf, "{\"views\":", 9)
-+			&& views_to_json(&buf, server)
-+			&& ipc_array_append(&buf, ",\"outputs\":", 11)
-+			&& outputs_to_json(&buf, server)
-+			&& ipc_array_append(&buf, "}", 1);
++		ok = ipc_array_append(buf, "{\"views\":", 9)
++			&& views_to_json(buf, server)
++			&& ipc_array_append(buf, ",\"outputs\":", 11)
++			&& outputs_to_json(buf, server)
++			&& ipc_array_append(buf, "}", 1);
 +	} else if (!strncmp(cmd, "ACTION ", 7)) {
 +		const char *error = ipc_run_action(server, cmd + 7);
 +		const char *response = error
 +			? "{\"ok\":false,\"error\":\"invalid action\"}"
 +			: "{\"ok\":true}";
-+		ok = ipc_array_append(&buf, response, strlen(response));
++		ok = ipc_array_append(buf, response, strlen(response));
 +	} else {
 +		const char *error = "{\"error\":\"unknown command\"}";
-+		ok = ipc_array_append(&buf, error, strlen(error));
++		ok = ipc_array_append(buf, error, strlen(error));
 +	}
 +
-+	if (!ok) {
++	if (!ok || !ipc_array_append(buf, "\n", 1)) {
 +		const char *error = "{\"error\":\"response too large\"}\n";
-+		ipc_respond(client->fd, error, strlen(error));
-+	} else {
-+		ipc_respond(client->fd, buf.data, buf.size);
-+		ipc_respond(client->fd, "\n", 1);
++		wl_array_release(buf);
++		wl_array_init(buf);
++		if (!ipc_array_append(buf, error, strlen(error))) {
++			return false;
++		}
 +	}
-+	wl_array_release(&buf);
++	client->response_offset = 0;
++	return wl_event_source_fd_update(client->source,
++		WL_EVENT_WRITABLE | WL_EVENT_HANGUP) >= 0;
 +}
 +
 +static int
-+ipc_client_readable(int fd, uint32_t mask, void *data)
++ipc_client_event(int fd, uint32_t mask, void *data)
 +{
 +	struct ipc_client *client = data;
 +
@@ -487,9 +480,31 @@ index 0000000..3bcf31e
 +		char *newline = strchr(client->buf, '\n');
 +		if (newline) {
 +			*newline = '\0';
-+			ipc_handle_command(client, client->buf);
-+			ipc_client_destroy(client);
++			if (!ipc_handle_command(client, client->buf)) {
++				ipc_client_destroy(client);
++			}
 +		}
++	}
++	if (mask & WL_EVENT_WRITABLE) {
++		while (client->response_offset < client->response.size) {
++			const char *ptr = client->response.data;
++			size_t remaining = client->response.size
++				- client->response_offset;
++			ssize_t n = send(client->fd,
++				ptr + client->response_offset, remaining, MSG_NOSIGNAL);
++			if (n < 0 && errno == EINTR) {
++				continue;
++			}
++			if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
++				return 0;
++			}
++			if (n <= 0) {
++				ipc_client_destroy(client);
++				return 0;
++			}
++			client->response_offset += n;
++		}
++		ipc_client_destroy(client);
 +	}
 +	return 0;
 +}
@@ -512,7 +527,8 @@ index 0000000..3bcf31e
 +	}
 +
 +	int flags = fcntl(client_fd, F_GETFL, 0);
-+	if (flags < 0 || fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) < 0) {
++	if (flags < 0 || fcntl(client_fd, F_SETFL, flags | O_NONBLOCK) < 0
++			|| fcntl(client_fd, F_SETFD, FD_CLOEXEC) < 0) {
 +		close(client_fd);
 +		return 0;
 +	}
@@ -524,11 +540,12 @@ index 0000000..3bcf31e
 +	}
 +	client->fd = client_fd;
 +	client->server = ipc_server;
++	wl_array_init(&client->response);
 +	client_count++;
 +	client->source = wl_event_loop_add_fd(
 +		ipc_server->wl_event_loop, client_fd,
 +		WL_EVENT_READABLE | WL_EVENT_HANGUP,
-+		ipc_client_readable, client);
++		ipc_client_event, client);
 +	client->timer = wl_event_loop_add_timer(
 +		ipc_server->wl_event_loop, ipc_client_timeout, client);
 +	if (!client->source || !client->timer
@@ -544,6 +561,7 @@ index 0000000..3bcf31e
 +ipc_init(struct server *server)
 +{
 +	ipc_server = server;
++	socket_owned = false;
 +
 +	const char *runtime = getenv("XDG_RUNTIME_DIR");
 +	if (!runtime) {
@@ -557,10 +575,30 @@ index 0000000..3bcf31e
 +		wlr_log(WLR_ERROR, "ipc: socket path is too long");
 +		return;
 +	}
++	struct sockaddr_un addr;
++	memset(&addr, 0, sizeof(addr));
++	addr.sun_family = AF_UNIX;
++	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
++
 +	struct stat existing;
 +	if (lstat(socket_path, &existing) == 0) {
 +		if (!S_ISSOCK(existing.st_mode) || existing.st_uid != geteuid()) {
 +			wlr_log(WLR_ERROR, "ipc: refusing to replace %s", socket_path);
++			return;
++		}
++		int probe_fd = socket(AF_UNIX,
++			SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
++		if (probe_fd < 0) {
++			wlr_log_errno(WLR_ERROR, "ipc: probe socket");
++			return;
++		}
++		int probe_result = connect(probe_fd,
++			(struct sockaddr *)&addr, sizeof(addr));
++		int probe_errno = errno;
++		close(probe_fd);
++		if (probe_result == 0 || probe_errno != ECONNREFUSED) {
++			wlr_log(WLR_ERROR, "ipc: socket is already active: %s",
++				socket_path);
 +			return;
 +		}
 +		if (unlink(socket_path) < 0) {
@@ -572,12 +610,8 @@ index 0000000..3bcf31e
 +		return;
 +	}
 +
-+	struct sockaddr_un addr;
-+	memset(&addr, 0, sizeof(addr));
-+	addr.sun_family = AF_UNIX;
-+	strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-+
-+	listen_fd = socket(AF_UNIX, SOCK_STREAM | SOCK_NONBLOCK, 0);
++	listen_fd = socket(AF_UNIX,
++		SOCK_STREAM | SOCK_NONBLOCK | SOCK_CLOEXEC, 0);
 +	if (listen_fd < 0) {
 +		wlr_log_errno(WLR_ERROR, "ipc: socket");
 +		return;
@@ -590,11 +624,13 @@ index 0000000..3bcf31e
 +		socket_path[0] = '\0';
 +		return;
 +	}
++	socket_owned = true;
 +	if (chmod(socket_path, 0600) < 0) {
 +		wlr_log_errno(WLR_ERROR, "ipc: chmod %s", socket_path);
 +		close(listen_fd);
 +		listen_fd = -1;
 +		unlink(socket_path);
++		socket_owned = false;
 +		socket_path[0] = '\0';
 +		return;
 +	}
@@ -604,6 +640,7 @@ index 0000000..3bcf31e
 +		close(listen_fd);
 +		listen_fd = -1;
 +		unlink(socket_path);
++		socket_owned = false;
 +		socket_path[0] = '\0';
 +		return;
 +	}
@@ -615,6 +652,7 @@ index 0000000..3bcf31e
 +		close(listen_fd);
 +		listen_fd = -1;
 +		unlink(socket_path);
++		socket_owned = false;
 +		socket_path[0] = '\0';
 +		return;
 +	}
@@ -633,10 +671,11 @@ index 0000000..3bcf31e
 +		close(listen_fd);
 +		listen_fd = -1;
 +	}
-+	if (socket_path[0]) {
++	if (socket_owned) {
 +		unlink(socket_path);
-+		socket_path[0] = '\0';
 +	}
++	socket_owned = false;
++	socket_path[0] = '\0';
 +}
 diff --git a/src/main.c b/src/main.c
 index 755a0a0..14cc6a6 100644

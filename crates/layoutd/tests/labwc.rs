@@ -182,6 +182,44 @@ fn output_and_client_geometry_changes_request_bounded_reconciliation() {
 }
 
 #[test]
+fn trickling_labwc_ipc_cannot_extend_the_request_deadline() {
+    let socket = std::env::temp_dir().join(format!(
+        "pelagian-layoutd-trickle-{}-{}.sock",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    let listener = UnixListener::bind(&socket).unwrap();
+    let server = thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = String::new();
+        BufReader::new(stream.try_clone().unwrap())
+            .read_line(&mut request)
+            .unwrap();
+        assert_eq!(request, "LIST\n");
+        for _ in 0..8 {
+            if stream.write_all(b"{").is_err() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    });
+
+    let mut adapter = LabwcIpcAdapter::new(&socket);
+    let started = Instant::now();
+    let error = adapter.observe_toplevel().unwrap_err().to_string();
+    assert!(started.elapsed() < Duration::from_millis(600));
+    assert!(
+        error.contains("deadline") || error.contains("timed out"),
+        "{error}"
+    );
+    server.join().unwrap();
+    fs::remove_file(socket).unwrap();
+}
+
+#[test]
 fn unresponsive_labwc_ipc_is_time_bounded() {
     let socket = std::env::temp_dir().join(format!(
         "pelagian-layoutd-timeout-{}-{}.sock",

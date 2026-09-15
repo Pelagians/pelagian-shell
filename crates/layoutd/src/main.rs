@@ -5,8 +5,8 @@ use std::thread;
 use std::time::Duration;
 
 use pelagian_layoutd::{
-    CompositorAdapter, LabwcIpcAdapter, RuntimeSettings, Workspace, reconcile_workspace_commands,
-    runtime_status_json, write_runtime_state,
+    CompositorAdapter, LabwcIpcAdapter, RuntimeSettings, Workspace, reconcile_float_mode_commands,
+    reconcile_workspace_commands, runtime_status_json, write_runtime_state,
 };
 use pelagian_shellctl::{ConfigRoots, resolve};
 
@@ -21,7 +21,13 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     };
     let profile = env::var("PELAGIAN_SHELL_PROFILE").unwrap_or_else(|_| "default".to_owned());
     let settings = RuntimeSettings::from_config(&resolve(roots, &profile)?.config);
-    let mut adapter = LabwcIpcAdapter::default();
+    let runtime_dir = env::var_os("XDG_RUNTIME_DIR").ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "XDG_RUNTIME_DIR is required for the session-private Labwc IPC socket",
+        )
+    })?;
+    let mut adapter = LabwcIpcAdapter::new(PathBuf::from(runtime_dir).join("labwc.sock"));
     let mut workspace = Workspace::default();
     let mode = if settings.automatic { "auto" } else { "float" };
 
@@ -45,7 +51,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     write_runtime_state(
                         mode,
                         "degraded",
-                        false,
+                        error.adapter_connected(),
                         "error",
                         managed_windows,
                         floating_windows,
@@ -90,7 +96,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                     write_runtime_state(
                         mode,
                         "degraded",
-                        true,
+                        error.adapter_connected(),
                         "error",
                         managed_windows,
                         floating_windows,
@@ -105,6 +111,23 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 managed_windows = classified.managed.len();
                 floating_windows = classified.floating.len();
+                if let Err(error) =
+                    adapter.apply_commands(&reconcile_float_mode_commands(&classified))
+                {
+                    eprintln!("pelagian-layoutd: reconciliation failed: {error}");
+                    write_runtime_state(
+                        mode,
+                        "degraded",
+                        error.adapter_connected(),
+                        "error",
+                        managed_windows,
+                        floating_windows,
+                        Some(&error.to_string()),
+                    )?;
+                    retry_reconciliation = true;
+                    thread::sleep(Duration::from_millis(250));
+                    continue;
+                }
             }
             retry_reconciliation = false;
             adapter_ready = true;

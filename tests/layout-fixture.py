@@ -50,6 +50,7 @@ def read_command() -> bool:
             transient_for=window,
             modal=True,
         )
+        dialog.set_default_size(480, 320)
         dialog.add_button("Close", Gtk.ResponseType.CLOSE)
         dialog.connect("response", lambda current, _response: current.destroy())
         dialog.show_all()

@@ -79,17 +79,17 @@
     <region name="auto-4-top-right" x="50%" y="0%" width="50%" height="50%" />
     <region name="auto-4-bottom-left" x="0%" y="50%" width="50%" height="50%" />
     <region name="auto-4-bottom-right" x="50%" y="50%" width="50%" height="50%" />
-    <region name="auto-5-r0-c0" x="0%" y="0%" width="33.333%" height="50%" />
-    <region name="auto-5-r0-c1" x="33.333%" y="0%" width="33.334%" height="50%" />
-    <region name="auto-5-r0-c2" x="66.667%" y="0%" width="33.333%" height="50%" />
+    <region name="auto-5-r0-c0" x="0%" y="0%" width="33%" height="50%" />
+    <region name="auto-5-r0-c1" x="33%" y="0%" width="34%" height="50%" />
+    <region name="auto-5-r0-c2" x="67%" y="0%" width="33%" height="50%" />
     <region name="auto-5-r1-c0" x="0%" y="50%" width="50%" height="50%" />
     <region name="auto-5-r1-c1" x="50%" y="50%" width="50%" height="50%" />
-    <region name="auto-6-r0-c0" x="0%" y="0%" width="33.333%" height="50%" />
-    <region name="auto-6-r0-c1" x="33.333%" y="0%" width="33.334%" height="50%" />
-    <region name="auto-6-r0-c2" x="66.667%" y="0%" width="33.333%" height="50%" />
-    <region name="auto-6-r1-c0" x="0%" y="50%" width="33.333%" height="50%" />
-    <region name="auto-6-r1-c1" x="33.333%" y="50%" width="33.334%" height="50%" />
-    <region name="auto-6-r1-c2" x="66.667%" y="50%" width="33.333%" height="50%" />
+    <region name="auto-6-r0-c0" x="0%" y="0%" width="33%" height="50%" />
+    <region name="auto-6-r0-c1" x="33%" y="0%" width="34%" height="50%" />
+    <region name="auto-6-r0-c2" x="67%" y="0%" width="33%" height="50%" />
+    <region name="auto-6-r1-c0" x="0%" y="50%" width="33%" height="50%" />
+    <region name="auto-6-r1-c1" x="33%" y="50%" width="34%" height="50%" />
+    <region name="auto-6-r1-c2" x="67%" y="50%" width="33%" height="50%" />
   </regions>
 
   <windowRules>

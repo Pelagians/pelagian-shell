@@ -60,6 +60,22 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             "auto-6-r1-c2",
         }
         self.assertEqual(expected, regions)
+        expected_thirds = {
+            "auto-5-r0-c0": ("0%", "33%"),
+            "auto-5-r0-c1": ("33%", "34%"),
+            "auto-5-r0-c2": ("67%", "33%"),
+            "auto-6-r0-c0": ("0%", "33%"),
+            "auto-6-r0-c1": ("33%", "34%"),
+            "auto-6-r0-c2": ("67%", "33%"),
+            "auto-6-r1-c0": ("0%", "33%"),
+            "auto-6-r1-c1": ("33%", "34%"),
+            "auto-6-r1-c2": ("67%", "33%"),
+        }
+        region_elements = {
+            region.attrib["name"]: region for region in root.findall("./regions/region")
+        }
+        for name, (x, width) in expected_thirds.items():
+            self.assertEqual((x, width), (region_elements[name].attrib["x"], region_elements[name].attrib["width"]))
         self.assertEqual("2", root.findtext("./theme/cornerRadius"))
         self.assertEqual(":close", root.findtext("./theme/titlebar/layout"))
         self.assertEqual("yes", root.findtext("./theme/titlebar/showTitle"))
@@ -185,15 +201,42 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("ENGINE=podman make container-smoke", workflow_text)
         self.assertIn("one through six normal windows", runtime_docs)
         self.assertIn("a transient dialog floats", runtime_docs)
+        architecture = (ROOT / "docs/architecture.md").read_text(encoding="utf-8")
+        library = (ROOT / "crates/layoutd/src/lib.rs").read_text(encoding="utf-8")
+        self.assertNotIn("future deterministic layout reconciler", architecture)
+        self.assertNotIn("A future Labwc-side adapter", architecture)
+        self.assertNotIn("not assumed to exist yet", architecture)
+        self.assertNotIn("No adapter is implemented yet", library)
 
         smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
         self.assertIn("stream_resolution 1920 1080", smoke)
         self.assertIn("stream_resolution 1366 768", smoke)
         self.assertIn("assert_native_wayland", smoke)
+        self.assertIn("xlsclients -l", smoke)
+        self.assertIn("pelagian-shell-consumer", smoke)
+        self.assertIn("pause_layoutd", smoke)
+        self.assertIn("wait_disrupted", smoke)
+        self.assertIn("kill -STOP", smoke)
+        self.assertIn("kill -CONT", smoke)
+        self.assertIn('len({view["pid"] for view in normals}) == count', smoke)
+        self.assertIn('dialog["x"] >= area["x"]', smoke)
+        self.assertIn("wait_layout 6 1366 768 Four 0", smoke)
+        self.assertIn('state["managed_windows"] == int(sys.argv[1])', smoke)
+        self.assertIn('state["floating_windows"] == int(sys.argv[2])', smoke)
+        self.assertIn('type(state["managed_windows"]) is int', smoke)
+        self.assertIn('type(state["floating_windows"]) is int', smoke)
+        self.assertIn("expected_geometry = {", smoke)
+        self.assertIn("assert actual == expected", smoke)
+        self.assertIn('dialog["client_width"] >= 320', smoke)
+        self.assertIn('if focused == "any":', smoke)
+        self.assertIn("*) focused=any", smoke)
         self.assertIn("'\"layoutd\":\"healthy\"'", smoke)
         self.assertIn("'\"adapter_connected\":true'", smoke)
         self.assertIn("'\"reconciliation\":\"healthy\"'", smoke)
         self.assertNotIn("'\"layoutd\":\"running\"'", smoke)
+
+        fixture = (ROOT / "tests/layout-fixture.py").read_text(encoding="utf-8")
+        self.assertIn("dialog.set_default_size(480, 320)", fixture)
 
     def test_readme_states_the_v0_1_0_boundary(self) -> None:
         readme = (ROOT / "README.md").read_text(encoding="utf-8")

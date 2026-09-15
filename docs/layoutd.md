@@ -18,7 +18,7 @@
   - 5: three top plus two bottom tiles;
   - 6: 3×2.
 - Managed-window overflow floats instead of disappearing.
-- A live `labwc-ipc` adapter using session-local stable view IDs and explicit Labwc `MAXIMIZE`, `SNAP`, `FLOAT`, and `DECORATION` actions.
+- A live `labwc-ipc` adapter using session-local stable view IDs and explicit Labwc `MAXIMIZE`, `SNAP`, `FLOAT`, `UNMANAGE`, and `DECORATION` actions.
 - A daemon loop started by Shell's Wayland autostart before the consumer hook.
 - Reconciliation after lifecycle, output-size, geometry, decoration, minimized, maximized, fullscreen, tiled-state, and daemon-restart drift; focus alone is ignored and never changes opening order.
 - Managed maximize/snap actions normalize stale minimized/fullscreen state and lock interactive movement until the view floats again.

@@ -84,6 +84,63 @@ fn daemon_without_labwc_reports_disconnected_degraded_health() {
 }
 
 #[test]
+fn action_connection_failure_reports_disconnected_health() {
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let runtime = std::env::temp_dir().join(format!(
+        "pelagian-layoutd-action-disconnect-{}-{}",
+        std::process::id(),
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    fs::create_dir_all(runtime.join("etc")).unwrap();
+    let state = runtime.join("state.json");
+    let listener = UnixListener::bind(runtime.join("labwc.sock")).unwrap();
+    let server = thread::spawn(move || {
+        for request_number in 0..3 {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut request = String::new();
+            BufReader::new(stream.try_clone().unwrap())
+                .read_line(&mut request)
+                .unwrap();
+            if request_number < 2 {
+                assert_eq!(request, "LIST\n");
+                stream
+                    .write_all(
+                        br#"{"views":[{"id":1,"app_id":"fixture","title":"Fixture","type":"normal","parent_id":null}],"outputs":[{"usable_area":{"width":1280,"height":720}}]}"#,
+                    )
+                    .unwrap();
+            } else {
+                assert_eq!(request, "ACTION 1 DECORATION full\n");
+                stream.write_all(br#"{"ok":true}"#).unwrap();
+            }
+        }
+    });
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_pelagian-layoutd"))
+        .env("PELAGIAN_SHELL_DATA_DIR", root.join("config"))
+        .env("PELAGIAN_SHELL_ETC_DIR", runtime.join("etc"))
+        .env("XDG_RUNTIME_DIR", &runtime)
+        .env("PELAGIAN_LAYOUTD_STATE", &state)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap();
+
+    server.join().unwrap();
+    let raw = wait_for_state(&state, "cannot connect");
+    let status: serde_json::Value = serde_json::from_str(&raw).unwrap();
+    assert_eq!(status["layoutd"], "degraded");
+    assert_eq!(status["adapter_connected"], false);
+    assert_eq!(status["reconciliation"], "error");
+
+    child.kill().unwrap();
+    child.wait().unwrap();
+    fs::remove_dir_all(runtime).unwrap();
+}
+
+#[test]
 fn daemon_survives_a_window_disappearing_during_reconciliation() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let runtime = std::env::temp_dir().join(format!(

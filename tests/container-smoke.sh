@@ -93,6 +93,13 @@ regions = {
     5: ["auto-5-r0-c0", "auto-5-r0-c1", "auto-5-r0-c2", "auto-5-r1-c0", "auto-5-r1-c1"],
     6: ["auto-6-r0-c0", "auto-6-r0-c1", "auto-6-r0-c2", "auto-6-r1-c0", "auto-6-r1-c1", "auto-6-r1-c2"],
 }
+expected_geometry = {
+    2: [(0, 0, 50, 100), (50, 0, 50, 100)],
+    3: [(0, 0, 50, 100), (50, 0, 50, 50), (50, 50, 50, 50)],
+    4: [(0, 0, 50, 50), (50, 0, 50, 50), (0, 50, 50, 50), (50, 50, 50, 50)],
+    5: [(0, 0, 33, 50), (33, 0, 34, 50), (67, 0, 33, 50), (0, 50, 50, 50), (50, 50, 50, 50)],
+    6: [(0, 0, 33, 50), (33, 0, 34, 50), (67, 0, 33, 50), (0, 50, 33, 50), (33, 50, 34, 50), (67, 50, 33, 50)],
+}
 views = {view["title"]: view for view in state["views"]}
 assert not any(title in views for title in titles[count:])
 normals = [views[title] for title in titles[:count]]
@@ -115,6 +122,14 @@ if count == 1:
 else:
     assert [view["region"] for view in normals] == regions[count]
     assert all(view["tiled"] and not view["maximized"] for view in normals)
+    for view, (x, y, region_width, region_height) in zip(normals, expected_geometry[count]):
+        left = area["width"] * x // 100
+        right = area["width"] * (x + region_width) // 100
+        top = area["height"] * y // 100
+        bottom = area["height"] * (y + region_height) // 100
+        expected = (area["x"] + left, area["y"] + top, right - left, bottom - top)
+        actual = tuple(view[key] for key in ("x", "y", "width", "height"))
+        assert actual == expected
     assert sum(view["width"] * view["height"] for view in normals) == area["width"] * area["height"]
     for index, first in enumerate(normals):
         for second in normals[index + 1:]:
@@ -122,10 +137,14 @@ else:
             overlap_height = min(first["y"] + first["height"], second["y"] + second["height"]) - max(first["y"], second["y"])
             assert overlap_width <= 0 or overlap_height <= 0
 
-if count >= 2:
-    assert normals[0]["app_id"] == normals[1]["app_id"] != ""
-    assert normals[0]["pid"] != normals[1]["pid"]
-if focused != "-":
+assert len({view["app_id"] for view in normals}) == 1
+assert normals[0]["app_id"] != ""
+assert len({view["pid"] for view in normals}) == count
+focused_normals = [view for view in normals if view["focused"]]
+if focused == "any":
+    assert len(focused_normals) == 1
+elif focused != "-":
+    assert len(focused_normals) == 1
     assert views[f"Pelagian Fixture {focused}"]["focused"]
 
 dialog = views.get("Pelagian Fixture Dialog")
@@ -135,6 +154,10 @@ if expect_dialog == "1":
     assert dialog["decoration"] == "full" and dialog["titlebar_visible"]
     assert not dialog["minimized"] and not dialog["fullscreen"]
     assert not dialog["maximized"] and not dialog["tiled"] and dialog["region"] == ""
+    assert dialog["client_width"] >= 320 and dialog["client_height"] >= 200
+    assert dialog["x"] >= area["x"] and dialog["y"] >= area["y"]
+    assert dialog["x"] + dialog["width"] <= area["x"] + area["width"]
+    assert dialog["y"] + dialog["height"] <= area["y"] + area["height"]
 else:
     assert dialog is None
 PY
@@ -171,8 +194,9 @@ wait_counts() {
     status=
     while [ "$attempt" -lt 200 ]; do
         status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
-        if printf '%s\n' "$status" | grep -q "\"managed_windows\":$expected_managed" \
-            && printf '%s\n' "$status" | grep -q "\"floating_windows\":$expected_floating"; then
+        if printf '%s\n' "$status" | python3 -c \
+            'import json, sys; state=json.load(sys.stdin); assert type(state["managed_windows"]) is int and type(state["floating_windows"]) is int; assert state["managed_windows"] == int(sys.argv[1]) and state["floating_windows"] == int(sys.argv[2])' \
+            "$expected_managed" "$expected_floating" 2>/dev/null; then
             return 0
         fi
         attempt=$((attempt + 1))
@@ -210,6 +234,78 @@ send_command() {
         sleep 0.1
     done
     echo "pelagian-shell smoke: fixture $fixture_mode did not acknowledge $fixture_command" >&2
+    return 1
+}
+
+pause_layoutd() {
+    status=$("$engine" exec "$name" pelagian-layoutd status)
+    layoutd_pid=$(printf '%s\n' "$status" | python3 -c 'import json, sys; print(json.load(sys.stdin)["pid"])')
+    "$engine" exec "$name" kill -STOP "$layoutd_pid"
+}
+
+resume_layoutd() {
+    "$engine" exec "$name" kill -CONT "$layoutd_pid"
+}
+
+labwc_action() {
+    title=$1
+    action=$2
+    state=$(labwc_state)
+    toplevel_id=$(python3 -c \
+        'import json, sys; state=json.loads(sys.argv[1]); print(next(view["id"] for view in state["views"] if view["title"] == sys.argv[2]))' \
+        "$state" "$title")
+    "$engine" exec -i --user abc --env XDG_RUNTIME_DIR=/config/.XDG \
+        "$name" python3 - "$toplevel_id" "$action" <<'PY'
+import json
+import os
+import socket
+import sys
+
+request = f"ACTION {sys.argv[1]} {sys.argv[2]}\n".encode()
+with socket.socket(socket.AF_UNIX) as client:
+    client.settimeout(2)
+    client.connect(os.path.join(os.environ["XDG_RUNTIME_DIR"], "labwc.sock"))
+    client.sendall(request)
+    response = b""
+    while True:
+        chunk = client.recv(65536)
+        if not chunk:
+            break
+        response += chunk
+result = json.loads(response)
+assert result.get("ok") is True, result
+PY
+}
+
+wait_disrupted() {
+    title=$1
+    disruption=$2
+    attempt=0
+    while [ "$attempt" -lt 100 ]; do
+        state=$(labwc_state 2>/dev/null || true)
+        if [ -n "$state" ] && python3 - "$title" "$disruption" "$state" <<'PY' 2>/dev/null
+import json
+import sys
+
+title, disruption, raw = sys.argv[1:]
+view = next(view for view in json.loads(raw)["views"] if view["title"] == title)
+if disruption == "resize":
+    assert not view["tiled"] and not view["maximized"] and view["region"] == ""
+    assert view["client_width"] <= 400 and view["client_height"] <= 320
+elif disruption == "fullscreen":
+    assert view["fullscreen"]
+elif disruption == "minimize":
+    assert view["minimized"]
+else:
+    raise AssertionError(disruption)
+PY
+        then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+    echo "pelagian-shell smoke: $disruption disruption was not observed for $title" >&2
     return 1
 }
 
@@ -289,8 +385,9 @@ restart_layoutd() {
 }
 
 assert_native_wayland() {
-    xclients=$("$engine" exec --user abc --env DISPLAY=:0 "$name" xlsclients 2>/dev/null)
-    if printf '%s\n' "$xclients" | grep -qi 'pelagian.*fixture'; then
+    xclients=$("$engine" exec --user abc --env DISPLAY=:0 "$name" xlsclients -l 2>/dev/null)
+    if printf '%s\n' "$xclients" | grep -Eqi \
+        'pelagian-layout-fixture|pelagian-shell-consumer|Pelagian Fixture (One|Two|Three|Four|Five|Six)'; then
         echo "pelagian-shell smoke: GTK fixture unexpectedly appeared in xlsclients" >&2
         printf '%s\n' "$xclients" >&2
         return 1
@@ -389,18 +486,34 @@ send_command first focus
 wait_layout 6 1920 1080 One 0
 send_command fourth focus
 wait_layout 6 1920 1080 Four 0
+
+pause_layoutd
+labwc_action "Pelagian Fixture Three" FLOAT
 send_command third resize
-wait_layout 6 1920 1080 - 0
+wait_disrupted "Pelagian Fixture Three" resize
+send_command fourth focus
+resume_layoutd
+wait_layout 6 1920 1080 Four 0
+
+pause_layoutd
 send_command fifth fullscreen
-wait_layout 6 1920 1080 - 0
+wait_disrupted "Pelagian Fixture Five" fullscreen
+send_command fourth focus
+resume_layoutd
+wait_layout 6 1920 1080 Four 0
+
+pause_layoutd
 send_command second minimize
-wait_layout 6 1920 1080 - 0
+wait_disrupted "Pelagian Fixture Two" minimize
+send_command fourth focus
+resume_layoutd
+wait_layout 6 1920 1080 Four 0
 
 stream_resolution 1366 768
-wait_layout 6 1366 768 - 0
+wait_layout 6 1366 768 Four 0
 wait_counts 6 0
 restart_layoutd
-wait_layout 6 1366 768 - 0
+wait_layout 6 1366 768 Four 0
 wait_counts 6 0
 
 count=6
@@ -408,7 +521,11 @@ for fixture_mode in sixth fifth fourth third second; do
     fixture_pid=$("$engine" exec "$name" cat "/tmp/pelagian-layout-$fixture_mode.pid")
     "$engine" exec "$name" kill "$fixture_pid"
     count=$((count - 1))
-    wait_layout "$count" 1366 768 - 0
+    case "$fixture_mode" in
+        sixth|fifth) focused=Four ;;
+        *) focused=any ;;
+    esac
+    wait_layout "$count" 1366 768 "$focused" 0
     wait_counts "$count" 0
 done
 

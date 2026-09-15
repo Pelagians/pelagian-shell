@@ -1,8 +1,9 @@
 use std::convert::Infallible;
 
 use pelagian_layoutd::{
-    CompositorAdapter, CompositorCommand, LayoutRequest, Output, ToplevelEvent, WorkspacePlan,
-    plan, reconcile_commands, reconcile_workspace_commands,
+    ClassifiedWindows, CompositorAdapter, CompositorCommand, LayoutRequest, Output, ToplevelEvent,
+    WorkspacePlan, plan, reconcile_commands, reconcile_float_mode_commands,
+    reconcile_workspace_commands,
 };
 
 #[derive(Default)]
@@ -89,6 +90,37 @@ fn workspace_reconciliation_floats_nonmanaged_windows() {
             },
             CompositorCommand::Unsnap {
                 toplevel_id: "overflow".into(),
+            },
+        ]
+    );
+}
+
+#[test]
+fn float_mode_releases_every_observed_window_from_managed_interaction() {
+    let commands = reconcile_float_mode_commands(&ClassifiedWindows {
+        managed: vec!["normal".into()],
+        floating: vec!["dialog".into()],
+        ignored: vec!["desktop".into()],
+    });
+    assert_eq!(
+        commands,
+        vec![
+            CompositorCommand::SetDecoration {
+                toplevel_id: "normal".into(),
+                decoration: pelagian_layoutd::DecorationState::Full,
+            },
+            CompositorCommand::Unsnap {
+                toplevel_id: "normal".into(),
+            },
+            CompositorCommand::SetDecoration {
+                toplevel_id: "dialog".into(),
+                decoration: pelagian_layoutd::DecorationState::Full,
+            },
+            CompositorCommand::Unsnap {
+                toplevel_id: "dialog".into(),
+            },
+            CompositorCommand::Unmanage {
+                toplevel_id: "desktop".into(),
             },
         ]
     );
