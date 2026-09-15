@@ -32,7 +32,8 @@ RUN set -eux; \
     apt-get update; \
     DEBIAN_FRONTEND=noninteractive apt-get install --no-install-recommends -y \
         gir1.2-gtk-3.0 \
-        python3-gi; \
+        python3-gi \
+        wlr-randr; \
     rm -rf /var/lib/apt/lists/*
 
 LABEL org.opencontainers.image.title="Pelagian Shell" \
@@ -78,6 +79,7 @@ RUN set -eux; \
     test -x /usr/local/bin/pelagian-layoutd; \
     test -x /lsiopy/bin/selkies; \
     command -v labwc; \
+    command -v wlr-randr; \
     PELAGIAN_SHELL_DATA_DIR=/usr/share/pelagian-shell \
         PELAGIAN_SHELL_ETC_DIR=/etc/pelagian-shell \
         /usr/local/bin/pelagian-shellctl config show >/dev/null; \

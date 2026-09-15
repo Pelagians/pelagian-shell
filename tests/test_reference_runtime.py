@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import subprocess
+import tempfile
 import tomllib
 import unittest
 import xml.etree.ElementTree as ET
@@ -30,9 +32,76 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         )
         self.assertIn("COPY session/autostart_wayland /defaults/autostart_wayland", containerfile)
         self.assertIn("COPY session/startwm_wayland.sh /defaults/startwm_wayland.sh", containerfile)
+        self.assertIn("wlr-randr", containerfile)
+        self.assertIn("command -v wlr-randr", containerfile)
         startwm = (ROOT / "session/startwm_wayland.sh").read_text(encoding="utf-8")
         self.assertIn("exec labwc -i", startwm)
+        autostart = (ROOT / "session/autostart_wayland").read_text(encoding="utf-8")
+        mode_command = 'wlr-randr --output WL-1 --custom-mode "${width}x${height}"'
+        self.assertIn(mode_command, autostart)
+        self.assertLess(autostart.index(mode_command), autostart.index('layoutd=/usr/local/bin/pelagian-layoutd'))
         self.assertIn("/init", (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8"))
+
+    def test_labwc_output_mode_validation_and_failure_state(self) -> None:
+        autostart = (ROOT / "session/autostart_wayland").read_text(encoding="utf-8")
+        mode_setup, separator, _ = autostart.partition("\nlayoutd=")
+        self.assertTrue(separator)
+
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            wlr_randr = fake_bin / "wlr-randr"
+            capture = root / "capture"
+            state_home = root / "state"
+            env = os.environ | {
+                "PATH": f"{fake_bin}:{os.environ['PATH']}",
+                "CAPTURE": str(capture),
+                "XDG_STATE_HOME": str(state_home),
+            }
+
+            wlr_randr.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$*" > "$CAPTURE"\n', encoding="utf-8"
+            )
+            wlr_randr.chmod(0o755)
+            configured = subprocess.run(
+                ["sh", "-c", mode_setup],
+                env=env | {"SELKIES_MANUAL_WIDTH": "1920", "SELKIES_MANUAL_HEIGHT": "1080"},
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(0, configured.returncode, configured.stderr)
+            self.assertEqual("--output WL-1 --custom-mode 1920x1080\n", capture.read_text())
+            status = state_home / "pelagian-shell/output-mode.status"
+            self.assertEqual("configured 1920x1080\n", status.read_text())
+
+            for width, height in (("1:2", "3"), ("1920", ""), ("00", "1080")):
+                capture.unlink(missing_ok=True)
+                rejected = subprocess.run(
+                    ["sh", "-c", mode_setup],
+                    env=env | {"SELKIES_MANUAL_WIDTH": width, "SELKIES_MANUAL_HEIGHT": height},
+                    check=False,
+                    capture_output=True,
+                    text=True,
+                )
+                self.assertNotEqual(0, rejected.returncode, (width, height))
+                self.assertFalse(capture.exists(), (width, height))
+
+            wlr_randr.write_text('#!/bin/sh\necho mode-failed\nexit 7\n', encoding="utf-8")
+            failed = subprocess.run(
+                ["sh", "-c", mode_setup],
+                env=env | {"SELKIES_MANUAL_WIDTH": "1366", "SELKIES_MANUAL_HEIGHT": "768"},
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(7, failed.returncode)
+            self.assertEqual("failed 1366x768 rc=7\n", status.read_text())
+            self.assertEqual(
+                "mode-failed\n",
+                (state_home / "pelagian-shell/output-mode.log").read_text(),
+            )
 
     def test_labwc_regions_and_minimal_single_workspace_policy(self) -> None:
         root = ET.parse(ROOT / "labwc/rc.xml").getroot()
@@ -220,6 +289,8 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn('sh "$0" "$image" 1366 768', smoke)
         self.assertIn("SELKIES_MANUAL_WIDTH", smoke)
         self.assertIn("SELKIES_MANUAL_HEIGHT", smoke)
+        self.assertIn("output-mode.status", smoke)
+        self.assertIn("output-mode.log", smoke)
         self.assertIn("assert_native_wayland", smoke)
         self.assertIn("xlsclients -l", smoke)
         self.assertIn("pelagian-shell-consumer", smoke)

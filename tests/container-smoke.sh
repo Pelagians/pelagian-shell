@@ -75,7 +75,7 @@ dump_failure() {
     labwc_state >&2 2>/dev/null || true
     "$engine" exec "$name" pelagian-layoutd status >&2 2>/dev/null || true
     "$engine" exec "$name" sh -c \
-        'for file in /config/.local/state/pelagian-shell/layoutd.log /config/.local/state/pelagian-shell/consumer.log; do test ! -f "$file" || { echo "--- $file"; tail -n 100 "$file"; }; done' \
+        'for file in /config/.local/state/pelagian-shell/output-mode.status /config/.local/state/pelagian-shell/output-mode.log /config/.local/state/pelagian-shell/layoutd.log /config/.local/state/pelagian-shell/consumer.log; do test ! -f "$file" || { echo "--- $file"; tail -n 100 "$file"; }; done' \
         >&2 2>/dev/null || true
 }
 
