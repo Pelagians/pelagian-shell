@@ -394,6 +394,7 @@ mount_mode=ro
     --env PIXELFLUX_WAYLAND=true \
     --env SELKIES_MANUAL_WIDTH="$width" \
     --env SELKIES_MANUAL_HEIGHT="$height" \
+    --env PELAGIAN_SHELL_LABWC_VERBOSE=true \
     --env PELAGIAN_SHELL_SESSION_SENTINEL="$sentinel" \
     --volume "$config_volume:/config" \
     --volume "$root/tests/layout-fixture.py:/usr/local/bin/pelagian-shell-consumer:$mount_mode" \
