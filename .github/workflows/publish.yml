@@ -96,6 +96,7 @@ jobs:
           # The single-quoted expression is a Go template, not shell expansion.
           # shellcheck disable=SC2016
           test "$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$reference")" = "$REVISION"
+          ENGINE=docker sh tests/container-smoke.sh "$reference"
           docker run --rm --entrypoint /usr/local/bin/pelagian-shellctl "$reference" status >/dev/null
           docker run --rm --entrypoint /usr/local/bin/pelagian-layoutd "$reference" status >/dev/null
           printf '## Published image\n\n- %s\n' "$reference" >> "$GITHUB_STEP_SUMMARY"

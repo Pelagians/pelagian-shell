@@ -1,4 +1,10 @@
-//! Deterministic, compositor-independent workspace model and layout planner.
+//! Layout policy and live Labwc adapter for Pelagian Shell.
+
+mod labwc;
+mod runtime;
+
+pub use labwc::{AdapterError, LabwcIpcAdapter};
+pub use runtime::{RuntimeSettings, runtime_status_json, write_runtime_state};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Output {
@@ -18,7 +24,7 @@ pub struct Rect {
 pub enum LayoutRequest {
     /// A compositor maximize request, deliberately distinct from fullscreen.
     Maximize,
-    /// A future compositor adapter should snap this to the named Labwc region.
+    /// The compositor adapter snaps this to the named Labwc region.
     Snap { region: String },
 }
 
@@ -66,6 +72,7 @@ pub struct WindowRule {
 pub enum ToplevelEvent {
     Upsert(Toplevel),
     Remove { id: String },
+    Reconcile,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -86,6 +93,7 @@ impl Workspace {
         match event {
             ToplevelEvent::Upsert(toplevel) => self.upsert(toplevel),
             ToplevelEvent::Remove { id } => self.remove(&id),
+            ToplevelEvent::Reconcile => {}
         }
     }
 
@@ -162,6 +170,9 @@ pub enum CompositorCommand {
     Unsnap {
         toplevel_id: String,
     },
+    Unmanage {
+        toplevel_id: String,
+    },
     SetDecoration {
         toplevel_id: String,
         decoration: DecorationState,
@@ -175,7 +186,7 @@ pub enum DecorationState {
     Full,
 }
 
-/// The only eventual live-compositor dependency. No adapter is implemented yet.
+/// The narrow live-compositor dependency implemented by the Labwc IPC adapter.
 pub trait CompositorAdapter {
     type Error;
 
@@ -187,16 +198,57 @@ pub trait CompositorAdapter {
 pub fn reconcile_commands(placements: &[Placement]) -> Vec<CompositorCommand> {
     placements
         .iter()
-        .map(|placement| match &placement.request {
-            LayoutRequest::Maximize => CompositorCommand::Maximize {
-                toplevel_id: placement.id.clone(),
-            },
-            LayoutRequest::Snap { region } => CompositorCommand::Snap {
-                toplevel_id: placement.id.clone(),
-                region: region.clone(),
-            },
+        .flat_map(|placement| {
+            [
+                CompositorCommand::SetDecoration {
+                    toplevel_id: placement.id.clone(),
+                    decoration: DecorationState::Full,
+                },
+                match &placement.request {
+                    LayoutRequest::Maximize => CompositorCommand::Maximize {
+                        toplevel_id: placement.id.clone(),
+                    },
+                    LayoutRequest::Snap { region } => CompositorCommand::Snap {
+                        toplevel_id: placement.id.clone(),
+                        region: region.clone(),
+                    },
+                },
+            ]
         })
         .collect()
+}
+
+pub fn reconcile_workspace_commands(plan: &WorkspacePlan) -> Vec<CompositorCommand> {
+    let mut commands = reconcile_commands(&plan.placements);
+    commands.extend(plan.floating.iter().flat_map(|toplevel_id| {
+        [
+            CompositorCommand::SetDecoration {
+                toplevel_id: toplevel_id.clone(),
+                decoration: DecorationState::Full,
+            },
+            CompositorCommand::Unsnap {
+                toplevel_id: toplevel_id.clone(),
+            },
+        ]
+    }));
+    commands.extend(
+        plan.ignored
+            .iter()
+            .map(|toplevel_id| CompositorCommand::Unmanage {
+                toplevel_id: toplevel_id.clone(),
+            }),
+    );
+    commands
+}
+
+pub fn reconcile_float_mode_commands(windows: &ClassifiedWindows) -> Vec<CompositorCommand> {
+    let mut floating = windows.managed.clone();
+    floating.extend(windows.floating.iter().cloned());
+    reconcile_workspace_commands(&WorkspacePlan {
+        placements: Vec::new(),
+        floating,
+        ignored: windows.ignored.clone(),
+    })
 }
 
 pub fn classify_toplevel(toplevel: &Toplevel, rules: &[WindowRule]) -> Classification {

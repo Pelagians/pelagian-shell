@@ -1,19 +1,26 @@
 # Reference runtime
 
-The reference image is a thin overlay on the exact LinuxServer Selkies base currently proven by Grotto. It uses `PIXELFLUX_WAYLAND=true`, disables `SELKIES_DESKTOP` and `PELORUS`, and leaves the Labwc session empty when no consumer application runs. That gives the outer Pelagian web UI a dark, quiet workspace rather than an inner desktop panel.
+The reference image overlays the exact LinuxServer Selkies base currently proven by Grotto. It uses `PIXELFLUX_WAYLAND=true`, disables `SELKIES_DESKTOP` and `PELORUS`, and starts a Shell-owned `labwc -i` session without an inner panel or desktop.
 
 ```bash
 make container-build VERSION=0.1.0
 make container-smoke VERSION=0.1.0
 ```
 
-`container-smoke` builds the image, starts its real `/init`, waits for Labwc and the session autostart sentinel, verifies Selkies HTTPS, and reads both status commands. It needs a running Docker or Podman daemon.
+`container-smoke` builds the image, starts its real `/init`, waits for Labwc, layoutd, the session sentinel, and Selkies HTTPS, then uses native GTK/Wayland fixtures to prove:
 
-The reference ships GTK dark defaults, and schema v1 accepts only `theme.variant = "dark"`; no functional light mode is advertised. It deliberately does not install `qt5ct` or `qt6ct`: selecting Qt appearance without the matching consumer runtime is inert configuration. Consumers that include one may add a small data-only drop-in and its matching Qt settings file.
+1. one through six normal windows use the documented layouts, including two windows from one application;
+2. outer geometry is bounded, non-overlapping, and covers the usable workspace while client content remains usable;
+3. every managed and floating view reports a visible full titlebar and no managed view remains minimized/fullscreen;
+4. a transient dialog floats without disturbing managed layout;
+5. focus changes, application resize/state requests, output resolution changes, closing windows, and layoutd restart reconcile without reordering; and
+6. an existing `/config` volume keeps unrelated application data while Shell-owned configuration is refreshed.
 
-Wine is not installed by the reference image. A Wine consumer selects a workload profile such as `PELAGIAN_SHELL_PROFILE=legacy-apps`; that profile enables `[capabilities].wine = true`. After prefix initialization, it explicitly runs `pelagian-shell-apply-wine-defaults`. The initial registry only sets broadly portable colors; DPI and font defaults remain unconfigured until a Wine/XWayland matrix proves them. No `msstyles` dependency is introduced.
+The assertions read Labwc's own window state and geometry rather than trusting layoutd's status file. The gate needs a running Docker or Podman daemon.
 
-The first reference artifact intentionally retains Grotto's pinned Selkies digest. It does not call `labwc -i`, enable Pelorus, or consume the downstream Labwc IPC patch as an API. LinuxServer documents that its base currently builds Labwc with that read-only patch; rebasing onto a clean upstream-Labwc runtime is future qualification work, not an unverified claim for this artifact.
+The image builds Labwc commit `f0dbad27fcf6e388cad1aa32448a1d548da68990` with `labwc/ipc-control.patch`. This is a narrow Pelagian downstream patch, not an upstream Labwc interface. It exposes stable compositor IDs, type/parent/output/state and decoration-aware outer geometry through `LIST`, plus targeted idempotent `ACTION` operations. The mode-0600 same-user socket bounds client count and lifetime. It does not add a second geometry engine; Labwc executes its existing maximize and named-region operations.
+
+The reference ships GTK dark defaults, and schema v1 accepts only `theme.variant = "dark"`. Wine is not installed. A Wine consumer selects `PELAGIAN_SHELL_PROFILE=legacy-apps`, initializes its prefix, then explicitly runs `pelagian-shell-apply-wine-defaults`.
 
 ## Canonical OCI publication
 
@@ -23,6 +30,6 @@ Default-branch and version-tag workflows publish `ghcr.io/pelagians/pelagian-she
 - the Git version tag, such as `v0.1.0`; and
 - `latest` for the current default branch.
 
-The digest is the canonical immutable identity. Downstream images should pin `ghcr.io/pelagians/pelagian-shell@sha256:...` (or at minimum the full commit tag), and record that identity in their own provenance. Publication includes OCI source, revision, and version labels plus BuildKit SBOM and provenance attestations.
+The digest is the canonical immutable identity. Downstream images should pin `ghcr.io/pelagians/pelagian-shell@sha256:...` or the full commit tag and record that identity in their provenance. Publication includes OCI source, revision, and version labels plus BuildKit SBOM and provenance attestations.
 
-v0.1.0 publishes `linux/amd64` only because that is the architecture exercised by the real Selkies/Labwc runtime smoke. Additional architectures require the same behavioral qualification before entering the publication matrix.
+v0.1.0 publishes `linux/amd64` only because that is the architecture exercised by the Selkies/Labwc runtime smoke. Additional architectures require the same behavioral qualification.

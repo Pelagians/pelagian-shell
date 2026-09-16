@@ -6,31 +6,38 @@
 2. one workload profile selected by `PELAGIAN_SHELL_PROFILE` (default: `default`)
 3. lexically ordered consumer drop-ins in `/etc/pelagian-shell/profile.d/*.toml`
 
-A profile is a workload choice such as `browser` or `legacy-apps`; it is not a capability bundle language. The profile and every drop-in are strict, versioned TOML. They cannot import profiles, inherit recursively, template values, or run commands.
+A profile is a workload choice such as `browser` or `legacy-apps`; it is not a capability bundle language. Profiles and drop-ins are strict, versioned TOML. They cannot import profiles, inherit recursively, template values, or run commands.
 
 ## Operative in v0.1.0
 
-The following resolved configuration and static runtime behavior are operative:
+The runtime applies:
 
 - workload profile selection and lexically layered TOML resolution;
+- `layout.mode`, `layout.solo`, `layout.multiple`, `layout.dialogs`, and profile-derived `window_rules`;
+- maximizes one window and tiles multiple windows through named Labwc regions;
+- floating dialogs, utilities, transients, matching rules, and managed-window overflow;
+- full server decoration for solo, tiled, floating, and overflow windows, styled as a slim titlebar with title and close only;
 - capabilities such as `capabilities.wine` and the Wine helper's capability gate;
-- static Labwc configuration and the Pelagian Shell theme;
-- GTK 3 and GTK 4 dark defaults; and
-- the reference Selkies/Labwc runtime; and
-- the optional `/usr/local/bin/pelagian-shell-consumer` application hook, with logs, PID, and exit status in `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
+- static Labwc configuration, GTK 3/4 dark defaults, and the Shell theme; and
+- the optional `/usr/local/bin/pelagian-shell-consumer`, with logs, PID, and exit status under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
 
-Schema v1 accepts only `theme.variant = "dark"` because the runtime installs only dark GTK defaults. `light` is rejected as unsupported. `layout.max_managed_windows` is constrained to `1..=6`, matching the layouts and static Labwc regions shipped in v0.1.0.
+Schema v1 accepts only `theme.variant = "dark"`; `light` is rejected. `layout.max_managed_windows` is constrained to `1..=6`, matching the planner and installed Labwc regions.
 
-## Resolved but not dynamically applied in v0.1.0
-
-The resolver accepts and reports the target policy fields `layout.mode`, `layout.solo`, `layout.multiple`, `layout.dialogs`, `decorations.solo`, `decorations.tiled`, `decorations.floating`, and profile-derived `window_rules`. They are planned inputs, not live compositor behavior in v0.1.0.
-
-In particular, v0.1.0 does not dynamically maximize one window, tile multiple windows, change decorations from resolved profiles, or reconcile live compositor state. `pelagian-layoutd` remains a pure planner and reports:
+`pelagian-layoutd status` reports process, connection, and reconciliation health rather than binary presence:
 
 ```text
-layoutd = planner_only
-compositor_adapter = unavailable
+layoutd = starting | healthy | degraded | stopped
+compositor_adapter = labwc-ipc
+adapter_connected = true | false
+reconciliation = pending | healthy | error | stopped
+managed_windows = <count>
+floating_windows = <count>
+last_error = <message or null>
 ```
+
+`pelagian-shellctl status` embeds this live result under `runtime`.
+
+The shipped default keeps `decorations.solo`, `decorations.tiled`, and `decorations.floating` at `full`. Layoutd reapplies full decoration during every reconciliation; the Labwc theme and `<layout>:close</layout>` make that decoration minimal.
 
 ## Capabilities
 
@@ -41,21 +48,23 @@ Capabilities are ordinary resolved data under `[capabilities]`. The first capabi
 wine = true
 ```
 
-`browser` leaves the default `wine = false`. The `legacy-apps` workload profile enables it. Consumers inspect the fully resolved data with:
+`browser` leaves the default `wine = false`. The `legacy-apps` workload profile enables it. Consumers inspect resolved data with:
 
 ```bash
 pelagian-shellctl config show
 pelagian-shellctl capability wine
 ```
 
-The Wine registry helper requires that resolved capability; it still performs no Wine or application launch itself.
+The Wine registry helper requires that resolved capability; it performs no Wine or application launch itself.
 
 ## Consumer drop-ins
 
-Consumers add small data overrides without forking shell code. For example, a PBS consumer may install [`examples/legacy-apps/profile.d/80-pbs.toml`](../examples/legacy-apps/profile.d/80-pbs.toml) after validating its real identifiers. It adds a floating authentication-dialog rule only. Application startup, authentication, and task behavior remain in the consumer.
+Consumers add small data overrides without forking Shell code. For example, [`examples/legacy-apps/profile.d/80-pbs.toml`](../examples/legacy-apps/profile.d/80-pbs.toml) adds a floating authentication-dialog rule. Application startup, authentication, and task behavior remain in the consumer.
 
-## Planned one-window behavior
+## One-window behavior
 
-The resolved target `layout.solo = "maximized"` means borderless compositor maximization once a supported live adapter exists. It intentionally is **not** true fullscreen, so dialogs remain functional and normal compositor behavior is retained. This is not dynamically applied in v0.1.0.
+`layout.solo = "maximized"` means compositor maximization, not true fullscreen. Dialogs remain functional and normal compositor behavior is retained.
 
-Grotto's ChatGPT desktop runtime is a consumer-side exception: its Electron window resets bounds after mapping, so Grotto keeps its app-specific true-fullscreen repair. That rule must not enter a generic profile or the shell baseline.
+## Workspace and interaction policy
+
+The shipped Labwc configuration creates exactly one workspace. Its explicit bindings are click-to-focus, `Alt+Tab` / `Shift+Alt+Tab`, `Alt+F4`, titlebar close, and `Super+Enter` for recovery. Workspace movement, minimize, manual maximize/fullscreen, shade, show-desktop, and manual snapping are not bound. Managed maximized/region-tiled views reject interactive move/resize. Floating views retain titlebar drag and border resize.

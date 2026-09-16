@@ -1,29 +1,31 @@
 # `pelagian-layoutd`
 
-`pelagian-layoutd` is deliberately a planner and reconciler, not a window manager.
+`pelagian-layoutd` is a planner and reconciler, not a window manager. Labwc remains the compositor.
 
 ## Implemented
 
 - Session-local ordered toplevel model with upsert/remove events.
-- Pure classification into `managed`, `floating`, and `ignored`:
+- Classification into `managed`, `floating`, and `ignored`:
   - normal root toplevels are managed;
   - dialogs, utilities, and transient normals float;
   - desktop/other surfaces are ignored;
-  - ordered rules override the default; the last matching `app_id`/`title` rule wins.
-- Pure deterministic plans for one through six managed windows:
+  - the last matching `app_id`/`title` rule wins.
+- Deterministic plans for one through six managed windows:
   - 1: maximize, not fullscreen;
   - 2: equal left/right halves;
   - 3: primary left half with two stacked right windows;
   - 4: 2×2;
   - 5: three top plus two bottom tiles;
   - 6: 3×2.
-- A configured managed-window ceiling moves overflow to floating rather than silently dropping it.
-- An explicit `CompositorAdapter` trait: lifecycle observation plus a small `CompositorCommand` set (`maximize`, `unmaximize`, `snap`, `unsnap`, optional decoration state). Pure planner output translates to those commands and is tested with a recording adapter.
+- Managed-window overflow floats instead of disappearing.
+- A live `labwc-ipc` adapter using session-local stable view IDs and explicit Labwc `MAXIMIZE`, `SNAP`, `FLOAT`, `UNMANAGE`, and `DECORATION` actions.
+- A daemon loop started by Shell's Wayland autostart before the consumer hook.
+- Reconciliation after lifecycle, output-size, geometry, decoration, minimized, maximized, fullscreen, tiled-state, and daemon-restart drift; focus alone is ignored and never changes opening order.
+- Managed maximize/snap actions normalize stale minimized/fullscreen state and lock interactive movement until the view floats again.
+- Atomic mode-0600 runtime state with PID identity, adapter connection, reconciliation health, counts, and the last error.
 
-All planner/model behavior is unit tested without a Wayland server.
+The planner/model and adapter protocol are unit tested without a Wayland server. `tests/container-smoke.sh` is the real runtime gate: it starts `/init`, proves layoutd stays alive, and checks maximize → 50/50 → floating dialog → maximize through Labwc's independent state inventory.
 
-## Not implemented yet
+## Deliberate limit
 
-No live Wayland observer, Labwc control adapter, IPC, geometry mutation, or daemon loop is shipped. Standard Wayland does not give an ordinary client authority to place arbitrary other toplevels. The future adapter must demonstrate supported Labwc-side maximize, snap, unsnap, and optional-decoration operations before it can reconcile these plans.
-
-`pelagian-layoutd status` intentionally reports `planner_only` and `compositor_adapter: unavailable` rather than pretending a live layout controller exists.
+Six normal windows are the supported tiled ceiling. Additional normal windows remain visible as floating overflow; they are not hidden, closed, or treated as a seventh layout mode. Closing managed windows promotes overflow in stable creation order. Application-specific client-side decorations remain application behavior; Shell does not crop or patch client chrome.
