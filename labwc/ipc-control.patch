@@ -782,3 +782,16 @@ index b8abc63..e7559ec 100644
  #if HAVE_XWAYLAND
  	xwayland_server_finish(server);
  #endif
+diff --git a/src/xdg.c b/src/xdg.c
+index d377480..44a916d 100644
+--- a/src/xdg.c
++++ b/src/xdg.c
+@@ -27,7 +27,7 @@
+ #include "workspaces.h"
+ 
+ #define LAB_XDG_SHELL_VERSION 6
+-#define CONFIGURE_TIMEOUT_MS 100
++#define CONFIGURE_TIMEOUT_MS 1000
+ 
+ static struct xdg_toplevel_view *
+ xdg_toplevel_view_from_view(struct view *view)

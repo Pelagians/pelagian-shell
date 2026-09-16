@@ -32,6 +32,7 @@ class LiveRuntimeBoundaryTests(unittest.TestCase):
         ipc_patch = (ROOT / "labwc/ipc-control.patch").read_text(encoding="utf-8")
 
         self.assertIn("chmod(socket_path, 0600)", ipc_patch)
+
         self.assertIn("wl_event_loop_add_timer", ipc_patch)
         self.assertIn("IPC_CLIENT_TIMEOUT_MS", ipc_patch)
         self.assertIn("IPC_MAX_CLIENTS", ipc_patch)
@@ -68,6 +69,12 @@ class LiveRuntimeBoundaryTests(unittest.TestCase):
         self.assertIn("set_write_timeout(Some(remaining))", adapter)
         self.assertNotIn("UnixStream::connect(&self.socket)", adapter)
         self.assertNotIn('PathBuf::from("/tmp")', adapter)
+
+    def test_nested_runtime_allows_slow_xdg_configure_commits(self) -> None:
+        ipc_patch = (ROOT / "labwc/ipc-control.patch").read_text(encoding="utf-8")
+
+        self.assertIn("-#define CONFIGURE_TIMEOUT_MS 100\n", ipc_patch)
+        self.assertIn("+#define CONFIGURE_TIMEOUT_MS 1000\n", ipc_patch)
 
 
 if __name__ == "__main__":
