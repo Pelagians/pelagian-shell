@@ -8,4 +8,7 @@ export XKB_DEFAULT_LAYOUT=us
 export XKB_DEFAULT_RULES=evdev
 export WAYLAND_DISPLAY=wayland-1
 
-exec labwc -i >/dev/null 2>&1
+state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+umask 077
+mkdir -p "$state_dir"
+exec labwc -i > "$state_dir/labwc.log" 2>&1

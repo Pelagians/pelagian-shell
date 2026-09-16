@@ -36,6 +36,8 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("command -v wlr-randr", containerfile)
         startwm = (ROOT / "session/startwm_wayland.sh").read_text(encoding="utf-8")
         self.assertIn("exec labwc -i", startwm)
+        self.assertIn("labwc.log", startwm)
+        self.assertNotIn("/dev/null 2>&1", startwm)
         autostart = (ROOT / "session/autostart_wayland").read_text(encoding="utf-8")
         mode_command = 'wlr-randr --output WL-1 --custom-mode "${width}x${height}"'
         self.assertIn(mode_command, autostart)
@@ -291,6 +293,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("SELKIES_MANUAL_HEIGHT", smoke)
         self.assertIn("output-mode.status", smoke)
         self.assertIn("output-mode.log", smoke)
+        self.assertIn("labwc.log", smoke)
         self.assertIn("assert_native_wayland", smoke)
         self.assertIn("xlsclients -l", smoke)
         self.assertIn("pelagian-shell-consumer", smoke)
