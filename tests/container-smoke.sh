@@ -221,7 +221,7 @@ wait_counts() {
     while [ "$attempt" -lt 200 ]; do
         status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
         if printf '%s\n' "$status" | python3 -c \
-            'import json, sys; state=json.load(sys.stdin); assert type(state["managed_windows"]) is int and type(state["floating_windows"]) is int; assert state["managed_windows"] == int(sys.argv[1]) and state["floating_windows"] == int(sys.argv[2])' \
+            'import json, sys; state=json.load(sys.stdin); assert type(state["managed_windows"]) is int and type(state["floating_windows"]) is int; assert state["managed_windows"] == int(sys.argv[1]) and state["floating_windows"] == int(sys.argv[2]); assert state["adapter_connected"] and state["layoutd"] == "healthy" and state["reconciliation"] == "healthy"' \
             "$expected_managed" "$expected_floating" 2>/dev/null; then
             return 0
         fi
@@ -381,11 +381,7 @@ restart_layoutd() {
         sleep 0.1
     done
     [ "$attempt" -lt 100 ]
-    "$engine" exec -d --user abc \
-        --env XDG_RUNTIME_DIR=/config/.XDG \
-        --env XDG_STATE_HOME=/config/.local/state \
-        "$name" sh -c \
-        'exec /usr/local/bin/pelagian-layoutd >> /config/.local/state/pelagian-shell/layoutd.log 2>&1'
+    # The session supervisor must replace the process without test assistance.
     attempt=0
     while [ "$attempt" -lt 200 ]; do
         status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
@@ -444,7 +440,7 @@ while [ "$attempt" -lt 60 ]; do
     status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
     if "$engine" exec "$name" pgrep -x labwc >/dev/null 2>&1 \
         && printf '%s\n' "$status" | python3 -c \
-            'import json, sys; state=json.load(sys.stdin); assert state["layoutd"] == "healthy" and state["adapter_connected"] and state["reconciliation"] == "healthy"' \
+            'import json, sys; state=json.load(sys.stdin); assert state["adapter_connected"] and state["layoutd"] in ("starting", "healthy", "degraded")' \
             2>/dev/null \
         && "$engine" exec "$name" test -f "$sentinel" \
         && curl --fail --silent --show-error --insecure --max-time 3 \
@@ -481,6 +477,9 @@ fi
 fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
 [ -n "$fixture_display" ]
 "$engine" exec "$name" test -S "/config/.XDG/$fixture_display"
+
+wait_layout 1 "$width" "$height" One 0
+wait_counts 1 0
 
 "$engine" exec "$name" pelagian-shellctl status >/dev/null
 "$engine" exec "$name" pelagian-shellctl config show >/dev/null

@@ -11,8 +11,8 @@ use serde::Deserialize;
 use socket2::{Domain, SockAddr, Socket, Type};
 
 use crate::{
-    CompositorAdapter, CompositorCommand, DecorationState, Output, Toplevel, ToplevelEvent,
-    ToplevelKind,
+    CompositorAdapter, CompositorCommand, DecorationState, LayoutRequest, Output, Toplevel,
+    ToplevelEvent, ToplevelKind, Workspace, WorkspacePlan,
 };
 
 const IPC_TIMEOUT: Duration = Duration::from_millis(250);
@@ -112,6 +112,10 @@ struct IpcOutput {
 
 #[derive(Deserialize)]
 struct IpcRect {
+    #[serde(default)]
+    x: i32,
+    #[serde(default)]
+    y: i32,
     width: u32,
     height: u32,
 }
@@ -129,6 +133,7 @@ pub struct LabwcIpcAdapter {
     layout_state: BTreeMap<u64, IpcLayoutState>,
     pending: VecDeque<ToplevelEvent>,
     output: Option<Output>,
+    output_origin: (i32, i32),
 }
 
 impl LabwcIpcAdapter {
@@ -139,12 +144,76 @@ impl LabwcIpcAdapter {
             layout_state: BTreeMap::new(),
             pending: VecDeque::new(),
             output: None,
+            output_origin: (0, 0),
         }
     }
 
     pub fn output(&self) -> Result<Output, AdapterError> {
         self.output
             .ok_or_else(|| AdapterError::connected("Labwc IPC did not report a usable output"))
+    }
+
+    /// Read exactly one inventory per daemon tick. Continuously changing
+    /// clients must not keep an event-draining loop from reaching its deadline.
+    pub fn observe_workspace(&mut self, workspace: &mut Workspace) -> Result<(), AdapterError> {
+        self.refresh()?;
+        for event in self.pending.drain(..) {
+            workspace.apply(event);
+        }
+        Ok(())
+    }
+
+    /// Verify observed outer geometry and compositor state, never ACTION ACKs.
+    pub fn convergence_error(&self, plan: &WorkspacePlan) -> Option<String> {
+        for placement in &plan.placements {
+            let view = placement
+                .id
+                .parse::<u64>()
+                .ok()
+                .and_then(|id| self.layout_state.get(&id));
+            let Some(view) = view else {
+                return Some(format!("window {} is absent", placement.id));
+            };
+            let rect = placement.rect;
+            let geometry_matches = i64::from(view.x)
+                == i64::from(self.output_origin.0) + i64::from(rect.x)
+                && i64::from(view.y) == i64::from(self.output_origin.1) + i64::from(rect.y)
+                && view.width == rect.width
+                && view.height == rect.height;
+            let placement_matches = match &placement.request {
+                LayoutRequest::Maximize => view.maximized && !view.tiled && view.region.is_empty(),
+                LayoutRequest::Snap { region } => {
+                    !view.maximized && view.tiled && view.region == *region
+                }
+            };
+            if !geometry_matches
+                || !placement_matches
+                || view.minimized
+                || view.fullscreen
+                || view.decoration != "full"
+                || !view.titlebar_visible
+            {
+                return Some(format!(
+                    "window {} has not reached its planned geometry/state",
+                    placement.id
+                ));
+            }
+        }
+        for id in &plan.floating {
+            let view = id
+                .parse::<u64>()
+                .ok()
+                .and_then(|id| self.layout_state.get(&id));
+            if !view.is_some_and(|view| {
+                view.decoration == "full"
+                    && !view.maximized
+                    && !view.tiled
+                    && view.region.is_empty()
+            }) {
+                return Some(format!("window {id} has not reached floating state"));
+            }
+        }
+        None
     }
 
     fn request(&self, request: &str) -> Result<String, AdapterError> {
@@ -253,6 +322,8 @@ impl LabwcIpcAdapter {
             })
             .filter(|output| output.width > 0 && output.height > 0)
             .ok_or_else(|| AdapterError::connected("Labwc IPC did not report a usable output"))?;
+        let area = &inventory.outputs[0].usable_area;
+        self.output_origin = (area.x, area.y);
         let mut current = BTreeMap::new();
         let mut layout_state = BTreeMap::new();
         for view in inventory.views {

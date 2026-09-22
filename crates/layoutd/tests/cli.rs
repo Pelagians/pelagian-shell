@@ -98,13 +98,13 @@ fn action_connection_failure_reports_disconnected_health() {
     let state = runtime.join("state.json");
     let listener = UnixListener::bind(runtime.join("labwc.sock")).unwrap();
     let server = thread::spawn(move || {
-        for request_number in 0..3 {
+        for request_number in 0..2 {
             let (mut stream, _) = listener.accept().unwrap();
             let mut request = String::new();
             BufReader::new(stream.try_clone().unwrap())
                 .read_line(&mut request)
                 .unwrap();
-            if request_number < 2 {
+            if request_number == 0 {
                 assert_eq!(request, "LIST\n");
                 stream
                     .write_all(
@@ -156,7 +156,7 @@ fn daemon_survives_a_window_disappearing_during_reconciliation() {
     let server = thread::spawn(move || {
         let mut list_count = 0;
         let mut maximize_count = 0;
-        for _ in 0..7 {
+        while maximize_count < 2 {
             let (mut stream, _) = listener.accept().unwrap();
             let mut request = String::new();
             BufReader::new(stream.try_clone().unwrap())
@@ -183,7 +183,7 @@ fn daemon_survives_a_window_disappearing_during_reconciliation() {
                 stream.write_all(br#"{"ok":true}"#).unwrap();
             }
         }
-        assert_eq!(list_count, 3);
+        assert!(list_count >= 2);
         assert_eq!(maximize_count, 2);
     });
 

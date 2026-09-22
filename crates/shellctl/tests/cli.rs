@@ -31,8 +31,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"
@@ -79,8 +79,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"
@@ -135,8 +135,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"

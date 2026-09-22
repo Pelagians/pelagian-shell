@@ -444,8 +444,15 @@ fn plan_small_grid(output: Output, windows: &[String]) -> Vec<Placement> {
         let y = output.height * row / 2;
         let next_y = output.height * (row + 1) / 2;
         for column in 0..columns {
-            let x = output.width * column / columns;
-            let next_x = output.width * (column + 1) / columns;
+            // Match the installed Labwc regions, including their integer
+            // percentage boundaries (33/67), rather than exact thirds.
+            let boundaries = if columns == 3 {
+                &[0, 33, 67, 100][..]
+            } else {
+                &[0, 50, 100][..]
+            };
+            let x = output.width * boundaries[column as usize] / 100;
+            let next_x = output.width * boundaries[column as usize + 1] / 100;
             placements.push(Placement {
                 id: windows[index].clone(),
                 rect: Rect {

@@ -23,7 +23,7 @@ The runtime applies:
 
 Schema v1 accepts only `theme.variant = "dark"`; `light` is rejected. `layout.max_managed_windows` is constrained to `1..=6`, matching the planner and installed Labwc regions.
 
-`pelagian-layoutd status` reports process, connection, and reconciliation health rather than binary presence:
+`pelagian-layoutd status` reports process, connection, and reconciliation health rather than binary presence. Command acknowledgement leaves reconciliation `pending`; only a subsequent compositor observation matching planned outer geometry, state, and decoration makes it `healthy`. An unchanged plan that fails to converge within five seconds becomes `degraded` with an error. Retries remain bounded to once per second, and later convergence restores health:
 
 ```text
 layoutd = starting | healthy | degraded | stopped
@@ -37,7 +37,7 @@ last_error = <message or null>
 
 `pelagian-shellctl status` embeds this live result under `runtime`.
 
-The shipped default keeps `decorations.solo`, `decorations.tiled`, and `decorations.floating` at `full`. Layoutd reapplies full decoration during every reconciliation; the Labwc theme and `<layout>:close</layout>` make that decoration minimal.
+Schema v1 requires `decorations.solo`, `decorations.tiled`, and `decorations.floating` to be `full`. Unsupported `none` and `border` values are rejected in defaults, profiles, and drop-ins. Layoutd reapplies full decoration during every reconciliation; the Labwc theme and `<layout>:close</layout>` make that decoration minimal.
 
 ## Capabilities
 

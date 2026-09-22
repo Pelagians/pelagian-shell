@@ -58,6 +58,7 @@ COPY labwc/rc.xml /defaults/labwc.xml
 COPY ["labwc/theme/Pelagian Shell/", "/usr/share/themes/Pelagian Shell/"]
 COPY session/startwm_wayland.sh /defaults/startwm_wayland.sh
 COPY session/autostart_wayland /defaults/autostart_wayland
+COPY session/supervise-layoutd /usr/local/bin/pelagian-shell-supervise-layoutd
 COPY session/autostart /defaults/autostart
 COPY session/20-pelagian-shell-config /custom-cont-init.d/20-pelagian-shell-config
 COPY theme/ /usr/share/pelagian-shell/theme/
@@ -68,6 +69,7 @@ RUN set -eux; \
     chmod 0755 \
         /defaults/autostart \
         /defaults/autostart_wayland \
+        /usr/local/bin/pelagian-shell-supervise-layoutd \
         /defaults/startwm_wayland.sh \
         /custom-cont-init.d/20-pelagian-shell-config \
         /usr/local/bin/pelagian-shell-apply-wine-defaults; \

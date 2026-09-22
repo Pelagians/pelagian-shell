@@ -45,15 +45,7 @@ if [ -x "$layoutd" ] || [ -x "$consumer_hook" ]; then
 fi
 
 if [ -x "$layoutd" ]; then
-    rm -f "$state_dir/layoutd.exit"
-    (
-        set +e
-        "$layoutd" >> "$state_dir/layoutd.log" 2>&1 &
-        layoutd_pid=$!
-        printf '%s\n' "$layoutd_pid" > "$state_dir/layoutd.pid"
-        wait "$layoutd_pid"
-        printf '%s\n' "$?" > "$state_dir/layoutd.exit"
-    ) &
+    /usr/local/bin/pelagian-shell-supervise-layoutd >> "$state_dir/layoutd-supervisor.log" 2>&1 &
 fi
 
 if [ -x "$consumer_hook" ]; then

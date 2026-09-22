@@ -184,16 +184,16 @@ fn five_windows_fill_balanced_rows_without_gaps() {
         Rect {
             x: 0,
             y: 0,
-            width: 400,
+            width: 396,
             height: 400
         }
     );
     assert_eq!(
         placements[2].rect,
         Rect {
-            x: 800,
+            x: 804,
             y: 0,
-            width: 400,
+            width: 396,
             height: 400
         }
     );
