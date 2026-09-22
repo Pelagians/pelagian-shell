@@ -15,3 +15,6 @@ The caller owns the container lifecycle, persistent volumes, and any application
 checks. Pin the Shell commit used to fetch these files, and check out the whole
 tree so the viewer and its checksum travel together. Changes to these scripts
 require downstream runtime qualification before updating that pin.
+
+`test_verify_shell_session.py` is the shared geometry regression suite. It runs
+as part of Shell's source checks so consumers do not need to copy these tests.

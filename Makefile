@@ -19,6 +19,7 @@ test:
 
 runtime-contract:
 	python3 -m unittest tests.test_reference_runtime tests.test_planner_only_boundary tests.test_consumer_session tests.test_layoutd_supervisor
+	python3 -m unittest discover -s tests/consumer-conformance -p 'test_*.py'
 	bash -n tests/consumer-conformance/start-shell-stream.sh
 	python3 -m py_compile tests/consumer-conformance/verify-shell-session.py
 
