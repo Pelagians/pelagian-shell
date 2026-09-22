@@ -280,7 +280,7 @@ focus_fixture() {
         tabs=$((tabs + 1))
         [ "$tabs" -le 6 ] || break
         "$engine" exec --user abc "$name" sh -c \
-            'rm -f /tmp/pelagian-stream-smoke/ack; printf %s "$1" > /tmp/pelagian-stream-smoke/command' \
+            'rm -f /tmp/pelagian-stream-smoke/ack; printf %s "$1" > /tmp/pelagian-stream-smoke/command.new; mv /tmp/pelagian-stream-smoke/command.new /tmp/pelagian-stream-smoke/command' \
             sh "$tabs"
         attempt=0
         while [ "$attempt" -lt 100 ]; do
@@ -385,7 +385,7 @@ restart_layoutd() {
         --env XDG_RUNTIME_DIR=/config/.XDG \
         --env XDG_STATE_HOME=/config/.local/state \
         "$name" sh -c \
-        'exec pelagian-layoutd >> /config/.local/state/pelagian-shell/layoutd.log 2>&1'
+        'exec /usr/local/bin/pelagian-layoutd >> /config/.local/state/pelagian-shell/layoutd.log 2>&1'
     attempt=0
     while [ "$attempt" -lt 200 ]; do
         status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
