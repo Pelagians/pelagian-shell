@@ -788,6 +788,23 @@ index b8abc63..e7559ec 100644
  #if HAVE_XWAYLAND
  	xwayland_server_finish(server);
  #endif
+diff --git a/src/view.c b/src/view.c
+--- a/src/view.c
++++ b/src/view.c
+@@ -1413,6 +1413,13 @@ view_maximize(struct view *view, enum view_axis axis)
+ 	assert(view);
+ 
+ 	if (view->maximized == axis) {
++		if (view->pelagian_managed && axis != VIEW_AXIS_NONE
++				&& !view->fullscreen) {
++			/* A client can accept maximize state with stale geometry.
++			 * Keep Shell retries effective after that commit.
++			 */
++			view_apply_special_geometry(view);
++		}
+ 		return;
+ 	}
+ 
 diff --git a/src/xdg.c b/src/xdg.c
 index d377480..44a916d 100644
 --- a/src/xdg.c

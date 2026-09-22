@@ -1,0 +1,17 @@
+ARG SHELL_IMAGE
+FROM ${SHELL_IMAGE} AS build
+USER root
+RUN apt-get update && apt-get install --no-install-recommends -y \
+    gcc pkg-config libwayland-dev wayland-protocols
+WORKDIR /fixture
+COPY tests/late-configure.c .
+RUN wayland-scanner client-header \
+      /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-client-protocol.h \
+    && wayland-scanner private-code \
+      /usr/share/wayland-protocols/stable/xdg-shell/xdg-shell.xml xdg-shell-protocol.c \
+    && cc -std=c11 -Wall -Wextra -Werror -Wno-unused-parameter \
+      late-configure.c xdg-shell-protocol.c -o late-configure $(pkg-config --cflags --libs wayland-client)
+
+# Test-only binary; keep the runtime filesystem and dependencies unchanged.
+FROM ${SHELL_IMAGE}
+COPY --from=build /fixture/late-configure /usr/local/libexec/pelagian-late-configure
