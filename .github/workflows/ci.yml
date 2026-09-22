@@ -10,6 +10,39 @@ permissions:
   contents: read
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      consumer: ${{ steps.scope.outputs.consumer }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Select real consumer qualification
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          base=''
+          if [[ "$EVENT" == pull_request ]]; then base="$PR_BASE"; fi
+          if [[ "$EVENT" == push ]]; then base="$PUSH_BASE"; fi
+          if [[ -z "$base" || "$base" =~ ^0+$ ]]; then
+            echo 'consumer=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git diff --name-only "$base...HEAD" > "$RUNNER_TEMP/changed-paths"
+          # Source-only docs and the separately pinned conformance fixture do
+          # not affect the production Shell image. Unknown paths retain the gate.
+          if grep -Ev '^(docs/|tests/consumer-conformance/|README\.md$|\.gitignore$)' "$RUNNER_TEMP/changed-paths" | grep -q .; then
+            echo 'consumer=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'consumer=false' >> "$GITHUB_OUTPUT"
+          fi
+
   check:
     runs-on: ubuntu-latest
     steps:
@@ -64,7 +97,8 @@ jobs:
         run: ENGINE=podman make container-smoke
 
   hermes-consumer:
-    needs: check
+    needs: [check, changes]
+    if: needs.changes.outputs.consumer == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
