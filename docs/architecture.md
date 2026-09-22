@@ -9,7 +9,7 @@ The shell supplies a quiet native GUI substrate inside a pod:
 - declarative workload-profile resolution and optional capabilities;
 - optional Wine visual defaults;
 - a tiny status/config command; and
-- `pelagian-layoutd`, a future deterministic layout reconciler.
+- `pelagian-layoutd`, a live deterministic layout reconciler.
 
 The outer Pelagian web UI remains the product shell. This repository deliberately does not create a panel, launcher, wallpaper manager, desktop icons, network controls, or a plugin system.
 
@@ -33,4 +33,4 @@ Every layer has `schema_version = 1`. Profiles choose workload behavior (`browse
 
 ## Control seam
 
-A future Labwc-side adapter needs only targeted operations: maximize/unmaximize a toplevel, snap/unsnap a toplevel to a named region, and optionally change its decoration state. The initial plans use names such as `auto-2-left`, `auto-3-right-top`, and `auto-5-r1-c1`; the adapter, not the planner, maps those identifiers to Labwc regions. Standard Wayland client protocols do not provide all of these geometry operations, so the adapter is intentionally not assumed to exist yet. See [`compositor-adapter.md`](compositor-adapter.md) and [`layoutd.md`](layoutd.md).
+The pinned Labwc adapter exposes only targeted operations: maximize/unmaximize a toplevel, snap/unsnap a toplevel to a named region, change its decoration state, and clear Shell interaction ownership. Plans use names such as `auto-2-left`, `auto-3-right-top`, and `auto-5-r1-c1`; the adapter maps those identifiers to Labwc regions. Standard Wayland client protocols do not provide all of these geometry operations, so the control socket remains session-private, bounded, and deliberately narrow. See [`compositor-adapter.md`](compositor-adapter.md) and [`layoutd.md`](layoutd.md).

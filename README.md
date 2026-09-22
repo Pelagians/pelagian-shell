@@ -4,7 +4,7 @@
 
 The canonical downstream base image is `ghcr.io/pelagians/pelagian-shell`. Consumers should pin its published digest or full `sha-<commit>` tag rather than copy shell files or derive directly from Selkies.
 
-The first implementation provides strict, inspectable TOML profile resolution, a Rust workspace model/layout planner, and a reference Selkies/Labwc container. `layoutd` remains planner-only until a supported compositor-control path exists. Consumers install an executable `/usr/local/bin/pelagian-shell-consumer`; the Shell-owned Labwc autostart launches it independently and records its exit status under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
+The runtime provides strict TOML profile resolution, a deterministic layout planner, a live Labwc compositor adapter, and daemonized layoutd. Consumers install an executable `/usr/local/bin/pelagian-shell-consumer`; Shell-owned autostart starts layoutd first, launches the consumer independently, and records diagnostics under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
 
 ## v0.1.0
 
@@ -14,11 +14,12 @@ Provides:
 - Pelagian visual/session defaults;
 - strict profiles/drop-ins;
 - optional Wine appearance capability;
-- deterministic layout planner and compositor adapter seam;
-- planner-only layoutd; and
+- deterministic layout planner;
+- live Labwc compositor adapter;
+- daemonized layoutd; and
 - shellctl/status/config tooling.
 
-v0.1.0 does not yet provide live automatic tiling because a supported targeted Labwc control interface has not been selected.
+v0.1.0 provides live automatic tiling for one through six normal windows while dialogs and transient windows float.
 
 Quick check:
 
@@ -29,4 +30,4 @@ pelagian-shellctl status
 pelagian-layoutd status
 ```
 
-See [`docs/migration-inventory.md`](docs/migration-inventory.md) for the source inventory, [`docs/architecture.md`](docs/architecture.md) for the boundary, [`docs/configuration.md`](docs/configuration.md) for workload profiles and capabilities, [`docs/layoutd.md`](docs/layoutd.md) for implemented versus blocked layout behavior, and [`docs/reference-runtime.md`](docs/reference-runtime.md) for the image/run gate.
+See [`docs/migration-inventory.md`](docs/migration-inventory.md) for the source inventory, [`docs/architecture.md`](docs/architecture.md) for the boundary, [`docs/configuration.md`](docs/configuration.md) for workload profiles and capabilities, [`docs/layoutd.md`](docs/layoutd.md) for layout behavior, and [`docs/reference-runtime.md`](docs/reference-runtime.md) for the image/run gate.

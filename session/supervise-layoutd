@@ -1,0 +1,56 @@
+#!/bin/sh
+set -eu
+
+layoutd=/usr/local/bin/pelagian-layoutd
+state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+umask 077
+mkdir -p "$state_dir"
+printf '%s\n' "$$" > "$state_dir/layoutd-supervisor.pid"
+restarts=0
+delay=1
+layoutd_pid=
+backoff_pid=
+
+stop() {
+    trap '' HUP INT TERM
+    for child in "$layoutd_pid" "$backoff_pid"; do
+        if [ -n "$child" ]; then
+            kill "$child" 2>/dev/null || true
+            wait "$child" 2>/dev/null || true
+        fi
+    done
+    printf 'stopped\n' > "$state_dir/layoutd-supervisor.status"
+    exit 0
+}
+trap stop HUP INT TERM
+rm -f "$state_dir/layoutd.exit"
+
+while :; do
+    started=$(date +%s)
+    printf '%s\n' "$restarts" > "$state_dir/layoutd.restarts"
+    "$layoutd" >> "$state_dir/layoutd.log" 2>&1 &
+    layoutd_pid=$!
+    printf '%s\n' "$layoutd_pid" > "$state_dir/layoutd.pid"
+    printf 'running\n' > "$state_dir/layoutd-supervisor.status"
+    rc=0
+    wait "$layoutd_pid" || rc=$?
+    layoutd_pid=
+    printf '%s\n' "$rc" > "$state_dir/layoutd.exit"
+    elapsed=$(($(date +%s) - started))
+    if [ "$elapsed" -ge 60 ]; then
+        restarts=0
+        delay=1
+    fi
+    if [ "$restarts" -ge 5 ]; then
+        printf 'failed\n' > "$state_dir/layoutd-supervisor.status"
+        echo 'pelagian-shell: layoutd exhausted five restarts; restart the session to retry' >&2
+        exit 1
+    fi
+    restarts=$((restarts + 1))
+    printf 'backoff\n' > "$state_dir/layoutd-supervisor.status"
+    sleep "$delay" &
+    backoff_pid=$!
+    wait "$backoff_pid"
+    backoff_pid=
+    delay=$((delay * 2))
+done

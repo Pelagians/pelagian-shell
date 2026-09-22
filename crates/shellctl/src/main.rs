@@ -1,6 +1,6 @@
 use std::env;
 use std::path::PathBuf;
-use std::process::ExitCode;
+use std::process::{Command, ExitCode};
 
 use pelagian_shellctl::{ConfigError, ConfigRoots, capability_enabled, render_toml, resolve};
 
@@ -31,8 +31,21 @@ fn show_config() -> Result<(), ConfigError> {
 fn show_status() -> Result<(), ConfigError> {
     let profile = profile_from_env();
     let resolved = resolve(roots_from_env(), &profile)?;
+    let layoutd = env::var_os("PELAGIAN_LAYOUTD_BIN").unwrap_or_else(|| "pelagian-layoutd".into());
+    let runtime = Command::new(layoutd)
+        .arg("status")
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .and_then(|output| String::from_utf8(output.stdout).ok())
+        .map(|output| output.trim().to_owned())
+        .filter(|output| output.starts_with('{') && output.ends_with('}'))
+        .unwrap_or_else(|| {
+            r#"{"layoutd":"unavailable","adapter_connected":false,"reconciliation":"unknown"}"#
+                .to_owned()
+        });
     println!(
-        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"unavailable\",\"layoutd\":\"planner_only\"}}",
+        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"labwc-ipc\",\"runtime\":{runtime}}}",
         resolved.config.layout.mode.as_str(),
         resolved.config.capabilities.wine,
     );

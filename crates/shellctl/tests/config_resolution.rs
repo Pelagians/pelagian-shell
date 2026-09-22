@@ -28,8 +28,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = {maximum}
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "{theme}"
@@ -72,6 +72,54 @@ fn rejects_unsupported_light_theme() {
 }
 
 #[test]
+fn rejects_unsupported_decorations_in_defaults_profiles_and_drop_ins() {
+    for field in ["solo", "tiled", "floating"] {
+        for value in ["none", "border"] {
+            for layer in ["defaults", "profile", "drop-in"] {
+                let root = test_root(&format!("decoration-{field}-{value}-{layer}"));
+                let roots = config_roots(&root, 6, "dark");
+                if layer == "defaults" {
+                    let path = roots.share.join("defaults.toml");
+                    let source = fs::read_to_string(&path).unwrap();
+                    // Replace only within [decorations], not layout.solo.
+                    let (before, after) = source.split_once("[decorations]").unwrap();
+                    fs::write(
+                        path,
+                        format!(
+                            "{before}[decorations]{}",
+                            after.replacen(
+                                &format!("{field} = \"full\""),
+                                &format!("{field} = \"{value}\""),
+                                1
+                            )
+                        ),
+                    )
+                    .unwrap();
+                } else {
+                    let path = if layer == "profile" {
+                        roots.share.join("profiles/default.toml")
+                    } else {
+                        fs::create_dir_all(roots.etc.join("profile.d")).unwrap();
+                        roots.etc.join("profile.d/90-decoration.toml")
+                    };
+                    fs::write(
+                        path,
+                        format!("schema_version = 1\n[decorations]\n{field} = \"{value}\"\n"),
+                    )
+                    .unwrap();
+                }
+                let error = resolve(roots, "default").unwrap_err().to_string();
+                assert!(
+                    error.contains(&format!("unknown variant `{value}`")),
+                    "{error}"
+                );
+                fs::remove_dir_all(root).unwrap();
+            }
+        }
+    }
+}
+
+#[test]
 fn resolves_selected_profile_after_builtin_defaults() {
     let root = test_root("selected-profile");
     let share = root.join("share");
@@ -89,8 +137,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"
@@ -136,8 +184,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"
@@ -206,8 +254,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"

@@ -7,11 +7,48 @@ if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
     : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
 fi
 
-consumer_hook=/usr/local/bin/pelagian-shell-consumer
-if [ -x "$consumer_hook" ]; then
-    state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+state_dir=${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell
+width=${SELKIES_MANUAL_WIDTH:-}
+height=${SELKIES_MANUAL_HEIGHT:-}
+if [ -n "$width$height" ]; then
+    for dimension in "$width" "$height"; do
+        case "$dimension" in
+            ''|*[!0-9]*)
+                echo "pelagian-shell: SELKIES_MANUAL_WIDTH and SELKIES_MANUAL_HEIGHT must both be positive integers" >&2
+                exit 1
+                ;;
+        esac
+        case "$dimension" in
+            *[1-9]*) ;;
+            *)
+                echo "pelagian-shell: SELKIES_MANUAL_WIDTH and SELKIES_MANUAL_HEIGHT must both be positive integers" >&2
+                exit 1
+                ;;
+        esac
+    done
     umask 077
     mkdir -p "$state_dir"
+    if wlr-randr --output WL-1 --custom-mode "${width}x${height}" > "$state_dir/output-mode.log" 2>&1; then
+        printf 'configured %sx%s\n' "$width" "$height" > "$state_dir/output-mode.status"
+    else
+        rc=$?
+        printf 'failed %sx%s rc=%s\n' "$width" "$height" "$rc" > "$state_dir/output-mode.status"
+        exit "$rc"
+    fi
+fi
+
+layoutd=/usr/local/bin/pelagian-layoutd
+consumer_hook=/usr/local/bin/pelagian-shell-consumer
+if [ -x "$layoutd" ] || [ -x "$consumer_hook" ]; then
+    umask 077
+    mkdir -p "$state_dir"
+fi
+
+if [ -x "$layoutd" ]; then
+    /usr/local/bin/pelagian-shell-supervise-layoutd >> "$state_dir/layoutd-supervisor.log" 2>&1 &
+fi
+
+if [ -x "$consumer_hook" ]; then
     rm -f "$state_dir/consumer.status"
     (
         set +e
@@ -22,6 +59,3 @@ if [ -x "$consumer_hook" ]; then
         printf '%s\n' "$?" > "$state_dir/consumer.status"
     ) &
 fi
-
-# pelagian-layoutd is intentionally not started: no supported compositor adapter
-# exists yet, and a planner-only daemon must not claim it controls windows.

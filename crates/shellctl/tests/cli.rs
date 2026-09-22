@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -30,8 +31,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"
@@ -61,7 +62,7 @@ wine = false
 }
 
 #[test]
-fn status_reports_resolved_profile_without_claiming_a_live_adapter() {
+fn status_reports_resolved_profile_and_live_adapter_contract() {
     let root = test_root("status");
     let share = root.join("share");
     let etc = root.join("etc");
@@ -78,8 +79,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"
@@ -89,11 +90,19 @@ wine = false
     )
     .unwrap();
     fs::write(share.join("profiles/default.toml"), "schema_version = 1\n").unwrap();
+    let layoutd = root.join("layoutd-status");
+    fs::write(
+        &layoutd,
+        "#!/bin/sh\nprintf '%s\\n' '{\"layoutd\":\"healthy\",\"adapter_connected\":true,\"reconciliation\":\"healthy\"}'\n",
+    )
+    .unwrap();
+    fs::set_permissions(&layoutd, fs::Permissions::from_mode(0o700)).unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_pelagian-shellctl"))
         .arg("status")
         .env("PELAGIAN_SHELL_DATA_DIR", &share)
         .env("PELAGIAN_SHELL_ETC_DIR", &etc)
+        .env("PELAGIAN_LAYOUTD_BIN", &layoutd)
         .output()
         .unwrap();
 
@@ -101,7 +110,11 @@ wine = false
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("\"profile\":\"default\""));
     assert!(stdout.contains("\"capabilities\":{\"wine\":false}"));
-    assert!(stdout.contains("\"compositor_adapter\":\"unavailable\""));
+    assert!(stdout.contains("\"compositor_adapter\":\"labwc-ipc\""));
+    assert!(stdout.contains("\"runtime\":{\"layoutd\":\"healthy\""));
+    assert!(stdout.contains("\"adapter_connected\":true"));
+    assert!(stdout.contains("\"reconciliation\":\"healthy\""));
+    assert!(!stdout.contains("planner_only"));
 }
 
 #[test]
@@ -122,8 +135,8 @@ multiple = "automatic"
 dialogs = "floating"
 max_managed_windows = 6
 [decorations]
-solo = "none"
-tiled = "border"
+solo = "full"
+tiled = "full"
 floating = "full"
 [theme]
 variant = "dark"

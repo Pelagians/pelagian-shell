@@ -18,7 +18,7 @@ test:
 	$(CARGO) test --workspace --locked
 
 runtime-contract:
-	python3 -m unittest tests.test_reference_runtime tests.test_planner_only_boundary tests.test_consumer_session
+	python3 -m unittest tests.test_reference_runtime tests.test_planner_only_boundary tests.test_consumer_session tests.test_layoutd_supervisor
 
 container-build:
 	$(ENGINE) build --build-arg VERSION=$(VERSION) --build-arg REVISION=$(REVISION) -f Containerfile -t $(IMAGE) .

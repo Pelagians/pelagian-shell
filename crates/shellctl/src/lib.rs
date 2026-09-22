@@ -88,8 +88,6 @@ pub struct Decorations {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum DecorationMode {
-    None,
-    Border,
     Full,
 }
 
