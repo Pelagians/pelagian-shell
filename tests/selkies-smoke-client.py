@@ -46,7 +46,25 @@ async def main():
             "use_cpu": True,
         }))
         rows = set()
-        async for message in client:
+        command_path = state_dir / "command"
+        while True:
+            if command_path.exists():
+                tabs = int(command_path.read_text())
+                command_path.unlink()
+                assert 1 <= tabs <= 6
+                # Exercise the configured Alt+Tab binding via real streamed input.
+                await client.send("kd,65513")  # Alt_L
+                for _ in range(tabs):
+                    await client.send("kd,65289")  # Tab
+                    await asyncio.sleep(0.05)
+                    await client.send("ku,65289")
+                    await asyncio.sleep(0.05)
+                await client.send("ku,65513")
+                (state_dir / "ack").write_text(str(tabs))
+            try:
+                message = await asyncio.wait_for(client.recv(), timeout=0.1)
+            except asyncio.TimeoutError:
+                continue
             if isinstance(message, str):
                 if message.startswith("KILL"):
                     raise RuntimeError(message)
@@ -66,7 +84,6 @@ async def main():
             if len(rows) == height and not ready.exists():
                 ready.write_text(f"decoded {width}x{height}\n")
                 print(f"selkies smoke: decoded {width}x{height}", flush=True)
-    raise RuntimeError("Selkies closed the smoke stream")
 
 
 if __name__ == "__main__":

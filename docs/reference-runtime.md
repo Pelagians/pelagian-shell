@@ -18,6 +18,8 @@ make container-smoke VERSION=0.1.0
 
 The assertions read Labwc's own window state and geometry rather than trusting layoutd's status file. The gate needs a running Docker or Podman daemon.
 
+Focus changes use the configured Alt+Tab binding through streamed keyboard input. They do not depend on an application being allowed to activate itself without a user-input token. Layout recovery preserves the previously active window when restoring minimized tiles.
+
 The first fixture inherits Labwc's child Wayland display through autostart; subsequent fixtures use that same socket. The outer Pixelflux socket is for Labwc itself. An HTTPS GET alone does not start video capture, and the pinned outer compositor can stall nested frame callbacks without a connected viewer. This smoke therefore qualifies an active streaming session, not operation while disconnected.
 
 The image builds Labwc commit `f0dbad27fcf6e388cad1aa32448a1d548da68990` with `labwc/ipc-control.patch`. This is a narrow Pelagian downstream patch, not an upstream Labwc interface. It exposes stable compositor IDs, type/parent/output/state and decoration-aware outer geometry through `LIST`, plus targeted idempotent `ACTION` operations. The mode-0600 same-user socket bounds client count and lifetime. It does not add a second geometry engine; Labwc executes its existing maximize and named-region operations.

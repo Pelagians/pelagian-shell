@@ -244,6 +244,10 @@ launch_fixture() {
 send_command() {
     fixture_mode=$1
     fixture_command=$2
+    if [ "$fixture_command" = focus ]; then
+        focus_fixture "$fixture_mode"
+        return
+    fi
     "$engine" exec --user abc "$name" sh -c \
         'rm -f "/tmp/pelagian-layout-$1.ack"; printf %s "$2" > "/tmp/pelagian-layout-$1.command"' \
         sh "$fixture_mode" "$fixture_command"
@@ -260,6 +264,35 @@ send_command() {
         sleep 0.1
     done
     echo "pelagian-shell smoke: fixture $fixture_mode did not acknowledge $fixture_command" >&2
+    return 1
+}
+
+focus_fixture() {
+    focus_pid=$("$engine" exec "$name" cat "/tmp/pelagian-layout-$1.pid")
+    tabs=0
+    while [ "$tabs" -le 6 ]; do
+        state=$(labwc_state)
+        if python3 -c \
+            'import json, sys; assert any(view["pid"] == int(sys.argv[1]) and view["focused"] for view in json.loads(sys.argv[2])["views"])' \
+            "$focus_pid" "$state" 2>/dev/null; then
+            return 0
+        fi
+        tabs=$((tabs + 1))
+        [ "$tabs" -le 6 ] || break
+        "$engine" exec --user abc "$name" sh -c \
+            'rm -f /tmp/pelagian-stream-smoke/ack; printf %s "$1" > /tmp/pelagian-stream-smoke/command' \
+            sh "$tabs"
+        attempt=0
+        while [ "$attempt" -lt 100 ]; do
+            ack=$("$engine" exec "$name" cat /tmp/pelagian-stream-smoke/ack 2>/dev/null || true)
+            [ "$ack" != "$tabs" ] || break
+            attempt=$((attempt + 1))
+            sleep 0.1
+        done
+        [ "$attempt" -lt 100 ] || return 1
+        sleep 0.5
+    done
+    echo "pelagian-shell smoke: streamed Alt+Tab did not focus fixture $1" >&2
     return 1
 }
 

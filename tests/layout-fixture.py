@@ -60,8 +60,6 @@ def read_command() -> bool:
     elif command == "dialog-close" and dialog is not None:
         dialog.destroy()
         dialog = None
-    elif command == "focus":
-        window.present()
     elif command == "resize":
         window.unmaximize()
         window.resize(320, 240)
