@@ -57,7 +57,7 @@ new file mode 100644
 index 0000000..41eb20d
 --- /dev/null
 +++ b/src/ipc.c
-@@ -0,0 +1,630 @@
+@@ -0,0 +1,625 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#define _POSIX_C_SOURCE 200809L
 +#include "config.h"
@@ -376,11 +376,6 @@ index 0000000..41eb20d
 +		view_set_fullscreen(view, false);
 +		view_set_untiled(view);
 +		view_maximize(view, VIEW_AXIS_BOTH);
-+		/* view_maximize() is a no-op when the state is already set.
-+		 * A client may have committed stale geometry after the first
-+		 * configure, so retries must also reapply the requested size.
-+		 */
-+		view_apply_special_geometry(view);
 +		return NULL;
 +	}
 +	if (!strcmp(action, "FLOAT") && !argument) {
@@ -793,6 +788,23 @@ index b8abc63..e7559ec 100644
  #if HAVE_XWAYLAND
  	xwayland_server_finish(server);
  #endif
+diff --git a/src/view.c b/src/view.c
+--- a/src/view.c
++++ b/src/view.c
+@@ -1413,6 +1413,13 @@ view_maximize(struct view *view, enum view_axis axis)
+ 	assert(view);
+ 
+ 	if (view->maximized == axis) {
++		if (view->pelagian_managed && axis != VIEW_AXIS_NONE
++				&& !view->fullscreen) {
++			/* A client can accept maximize state with stale geometry.
++			 * Keep Shell retries effective after that commit.
++			 */
++			view_apply_special_geometry(view);
++		}
+ 		return;
+ 	}
+ 
 diff --git a/src/xdg.c b/src/xdg.c
 index d377480..44a916d 100644
 --- a/src/xdg.c
