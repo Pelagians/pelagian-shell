@@ -32,6 +32,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Build and smoke-test the reference Selkies/Labwc image
         run: make container-smoke
+      - name: Prove the resize regression fails on the previous image
+        shell: bash
+        run: |
+          set -euo pipefail
+          log="$(mktemp)"
+          trap 'rm -f "$log"' EXIT
+          previous=ghcr.io/pelagians/pelagian-shell@sha256:083dc52c943c0a92d5a9b15a25e9798fc2967b95fd6f2ccbca4e3bbb2c91b1bb
+          if ENGINE=docker sh tests/container-smoke.sh "$previous" > "$log" 2>&1; then
+            cat "$log"
+            echo 'Expected the previous image to fail resize recovery.' >&2
+            exit 1
+          fi
+          grep -Fx 'pelagian-shell late-configure: stale' "$log"
+          grep -Fx 'pelagian-shell smoke: late-configure phase recovered failed' "$log"
 
   rootless-podman:
     needs: check
@@ -48,3 +62,46 @@ jobs:
           podman info
       - name: Build and smoke-test without privileges
         run: ENGINE=podman make container-smoke
+
+  hermes-consumer:
+    needs: check
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      # Grotto's consumer hook and real-window/keyring/restart smoke contract.
+      GROTTO_COMMIT: 23305ea31f1fd0342e0185736708392216715662
+      SHELL_IMAGE: localhost/pelagian-shell:candidate
+      HERMES_IMAGE: localhost/pelagian-shell-hermes:qualification
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Check out the pinned Grotto consumer
+        uses: actions/checkout@v4
+        with:
+          repository: Pelagians/Grotto
+          ref: ${{ env.GROTTO_COMMIT }}
+          path: consumer
+          persist-credentials: false
+      - name: Reclaim runner disk space
+        run: |
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /opt/hostedtoolcache/CodeQL
+          df -h /
+      - name: Build this Shell and the real Hermes consumer
+        run: |
+          set -euo pipefail
+          make container-build IMAGE="$SHELL_IMAGE" REVISION="${{ github.event.pull_request.head.sha || github.sha }}"
+          docker build -f consumer/Containerfile.hermes-desktop \
+            --build-arg "PELAGIAN_SHELL_IMAGE=$SHELL_IMAGE" \
+            --build-arg "GROTTO_BUILD_REVISION=$GROTTO_COMMIT" \
+            -t "$HERMES_IMAGE" consumer
+      - name: Qualify Hermes under Docker
+        run: CONTAINER_ENGINE=docker GROTTO_HERMES_DESKTOP_IMAGE="$HERMES_IMAGE" consumer/tests/smoke-hermes-desktop.sh
+      - name: Qualify the same Hermes image under rootless Podman
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes podman uidmap slirp4netns fuse-overlayfs
+          test "$(podman info --format '{{.Host.Security.Rootless}}')" = true
+          docker save "$HERMES_IMAGE" | podman load
+          CONTAINER_ENGINE=podman GROTTO_HERMES_DESKTOP_IMAGE="$HERMES_IMAGE" consumer/tests/smoke-hermes-desktop.sh

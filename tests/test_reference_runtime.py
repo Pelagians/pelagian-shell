@@ -271,7 +271,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("make check", workflow_text)
         self.assertIn("make container-smoke", workflow_text)
         self.assertEqual(
-            3,
+            4,
             workflow_text.count(
                 "ref: ${{ github.event.pull_request.head.sha || github.sha }}"
             ),
@@ -289,8 +289,8 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
 
         smoke = (ROOT / "tests/container-smoke.sh").read_text(encoding="utf-8")
         self.assertNotIn("stream_resolution()", smoke)
-        self.assertIn('sh "$0" "$image" 1920 1080', smoke)
-        self.assertIn('sh "$0" "$image" 1366 768', smoke)
+        self.assertIn('sh "$0" "$fixture_image" 1920 1080', smoke)
+        self.assertIn('sh "$0" "$fixture_image" 1366 768', smoke)
         self.assertIn("SELKIES_MANUAL_WIDTH", smoke)
         self.assertIn("SELKIES_MANUAL_HEIGHT", smoke)
         self.assertIn("PELAGIAN_SHELL_LABWC_VERBOSE", smoke)

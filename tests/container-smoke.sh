@@ -24,8 +24,12 @@ if ! "$engine" info >/dev/null 2>&1; then
 fi
 
 if [ "$#" -lt 3 ]; then
-    ENGINE="$engine" sh "$0" "$image" 1920 1080
-    ENGINE="$engine" sh "$0" "$image" 1366 768
+    fixture_image="localhost/pelagian-shell-regression:$$"
+    "$engine" build --build-arg "SHELL_IMAGE=$image" \
+        -f "$root/tests/Containerfile.late-configure" -t "$fixture_image" "$root"
+    trap '"$engine" image rm "$fixture_image" >/dev/null 2>&1 || true' EXIT
+    ENGINE="$engine" sh "$0" "$fixture_image" 1920 1080
+    ENGINE="$engine" sh "$0" "$fixture_image" 1366 768
     echo "pelagian-shell smoke: PASS image=$image engine=$engine resolutions=1920x1080,1366x768"
     exit 0
 fi
@@ -407,6 +411,43 @@ assert_native_wayland() {
     fi
 }
 
+wait_late_configure() {
+    phase=$1
+    attempt=0
+    while [ "$attempt" -lt 100 ]; do
+        state=$(labwc_state 2>/dev/null || true)
+        status=$("$engine" exec "$name" pelagian-layoutd status 2>/dev/null || true)
+        if python3 - "$phase" "$state" "$status" <<'PY' 2>/dev/null
+import json
+import sys
+
+phase = sys.argv[1]
+state, health = map(json.loads, sys.argv[2:])
+assert len(state["views"]) == 1
+view = state["views"][0]
+assert view["title"] == "Pelagian Late Configure"
+assert view["maximized"] and not view["fullscreen"] and not view["tiled"]
+assert view["decoration"] == "full" and view["titlebar_visible"]
+assert health["adapter_connected"] and health["managed_windows"] == 1
+if phase == "stale":
+    assert (view["client_width"], view["client_height"]) == (640, 480)
+    assert health["layoutd"] == "degraded" and health["reconciliation"] == "error"
+else:
+    area = state["outputs"][0]["usable_area"]
+    assert all(view[key] == area[key] for key in ("x", "y", "width", "height"))
+    assert health["layoutd"] == "healthy" and health["reconciliation"] == "healthy"
+PY
+        then
+            printf 'pelagian-shell late-configure: %s\n' "$phase"
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+    echo "pelagian-shell smoke: late-configure phase $phase failed" >&2
+    return 1
+}
+
 "$engine" volume create "$config_volume" >/dev/null
 "$engine" run --rm --entrypoint /bin/sh \
     --volume "$config_volume:/config" \
@@ -570,6 +611,18 @@ for fixture_mode in sixth fifth fourth third second; do
     wait_layout "$count" "$width" "$height" "$focused" 0
     wait_counts "$count" 0
 done
+
+# Model a slow application that accepts maximize state but commits old pixels.
+# A subsequent MAXIMIZE must resend geometry even though its state is unchanged.
+fixture_pid=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.pid)
+"$engine" exec "$name" kill "$fixture_pid"
+"$engine" exec -d --user abc \
+    --env XDG_RUNTIME_DIR=/config/.XDG --env WAYLAND_DISPLAY="$fixture_display" \
+    "$name" /usr/local/libexec/pelagian-late-configure
+wait_late_configure stale
+"$engine" exec "$name" test -f /tmp/pelagian-late-configure.stale
+"$engine" exec --user abc "$name" touch /tmp/pelagian-late-configure.release
+wait_late_configure recovered
 
 "$engine" exec "$name" sh -c 'kill -0 "$(cat /tmp/pelagian-stream-smoke/pid)"'
 echo "pelagian-shell smoke: PASS image=$image engine=$engine resolution=${width}x${height}"
