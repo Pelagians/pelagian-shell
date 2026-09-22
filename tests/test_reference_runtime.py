@@ -271,7 +271,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("make check", workflow_text)
         self.assertIn("make container-smoke", workflow_text)
         self.assertEqual(
-            4,
+            5,
             workflow_text.count(
                 "ref: ${{ github.event.pull_request.head.sha || github.sha }}"
             ),
