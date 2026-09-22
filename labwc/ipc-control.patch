@@ -57,7 +57,7 @@ new file mode 100644
 index 0000000..41eb20d
 --- /dev/null
 +++ b/src/ipc.c
-@@ -0,0 +1,619 @@
+@@ -0,0 +1,620 @@
 +// SPDX-License-Identifier: GPL-2.0-only
 +#define _POSIX_C_SOURCE 200809L
 +#include "config.h"
@@ -275,7 +275,7 @@ index 0000000..41eb20d
 +		view->minimized ? "true" : "false",
 +		view->fullscreen ? "true" : "false",
 +		view->maximized != VIEW_AXIS_NONE ? "true" : "false",
-+		view->tiled != LAB_EDGE_NONE ? "true" : "false",
++		view_is_tiled(view) ? "true" : "false",
 +		region_esc,
 +		view == server->active_view ? "true" : "false");
 +	if (len < 0 || (size_t)len >= sizeof(entry)
@@ -374,6 +374,7 @@ index 0000000..41eb20d
 +		view->pelagian_managed = true;
 +		view_minimize(view, false);
 +		view_set_fullscreen(view, false);
++		view_set_untiled(view);
 +		view_maximize(view, VIEW_AXIS_BOTH);
 +		return NULL;
 +	}

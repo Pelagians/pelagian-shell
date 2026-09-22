@@ -75,7 +75,7 @@ dump_failure() {
     labwc_state >&2 2>/dev/null || true
     "$engine" exec "$name" pelagian-layoutd status >&2 2>/dev/null || true
     "$engine" exec "$name" sh -c \
-        'for file in /config/.local/state/pelagian-shell/output-mode.status /config/.local/state/pelagian-shell/output-mode.log /config/.local/state/pelagian-shell/labwc.log /config/.local/state/pelagian-shell/layoutd.log /config/.local/state/pelagian-shell/consumer.log; do test ! -f "$file" || { echo "--- $file"; tail -n 100 "$file"; }; done' \
+        'for file in /config/.local/state/pelagian-shell/output-mode.status /config/.local/state/pelagian-shell/output-mode.log /config/.local/state/pelagian-shell/labwc.log /config/.local/state/pelagian-shell/layoutd.log /config/.local/state/pelagian-shell/consumer.log /tmp/pelagian-stream-smoke.log; do test ! -f "$file" || { echo "--- $file"; tail -n 100 "$file"; }; done' \
         >&2 2>/dev/null || true
 }
 
@@ -205,7 +205,11 @@ wait_layout() {
         attempt=$((attempt + 1))
         sleep 0.1
     done
-    echo "pelagian-shell smoke: layout did not converge" >&2
+    echo "pelagian-shell smoke: layout did not converge (windows=$expected_count resolution=${expected_width}x${expected_height} focus=$expected_focus dialog=$expected_dialog)" >&2
+    if [ -n "$state" ]; then
+        stage_matches "$expected_count" "$expected_width" "$expected_height" \
+            "$expected_focus" "$expected_dialog" "$state" || true
+    fi
     return 1
 }
 
@@ -233,7 +237,7 @@ launch_fixture() {
     "$engine" exec -d --user abc \
         --env GDK_BACKEND=wayland \
         --env XDG_RUNTIME_DIR=/config/.XDG \
-        --env WAYLAND_DISPLAY=wayland-1 \
+        --env WAYLAND_DISPLAY="$fixture_display" \
         "$name" /usr/local/bin/pelagian-shell-consumer "$1"
 }
 
@@ -398,6 +402,7 @@ mount_mode=ro
     --env PELAGIAN_SHELL_SESSION_SENTINEL="$sentinel" \
     --volume "$config_volume:/config" \
     --volume "$root/tests/layout-fixture.py:/usr/local/bin/pelagian-shell-consumer:$mount_mode" \
+    --volume "$root/tests/selkies-smoke-client.py:/tmp/selkies-smoke-client.py:$mount_mode" \
     "$image" >/dev/null
 
 ready=
@@ -421,6 +426,28 @@ if [ -z "$ready" ]; then
     echo "pelagian-shell smoke: Labwc, session autostart, or Selkies HTTPS did not become ready" >&2
     exit 1
 fi
+
+# Receive real video through nginx so the nested output has frame callbacks.
+# An HTTP readiness probe alone leaves the pinned Pixelflux capture idle.
+"$engine" exec -d --user abc "$name" sh -c \
+    'exec /lsiopy/bin/python /tmp/selkies-smoke-client.py "$1" "$2" > /tmp/pelagian-stream-smoke.log 2>&1' \
+    sh "$width" "$height"
+attempt=0
+while [ "$attempt" -lt 100 ]; do
+    if "$engine" exec "$name" test -f /tmp/pelagian-stream-smoke/ready; then
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.2
+done
+if [ "$attempt" -eq 100 ]; then
+    echo "pelagian-shell smoke: Selkies did not deliver a decoded frame" >&2
+    exit 1
+fi
+"$engine" exec "$name" cat /tmp/pelagian-stream-smoke/ready
+fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
+[ -n "$fixture_display" ]
+"$engine" exec "$name" test -S "/config/.XDG/$fixture_display"
 
 "$engine" exec "$name" pelagian-shellctl status >/dev/null
 "$engine" exec "$name" pelagian-shellctl config show >/dev/null
@@ -512,4 +539,5 @@ for fixture_mode in sixth fifth fourth third second; do
     wait_counts "$count" 0
 done
 
+"$engine" exec "$name" sh -c 'kill -0 "$(cat /tmp/pelagian-stream-smoke/pid)"'
 echo "pelagian-shell smoke: PASS image=$image engine=$engine resolution=${width}x${height}"

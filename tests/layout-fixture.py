@@ -30,6 +30,9 @@ window.set_default_size(800, 600)
 window.connect("destroy", Gtk.main_quit)
 window.show_all()
 Path(f"/tmp/pelagian-layout-{mode}.pid").write_text(str(os.getpid()))
+# The first fixture inherits Labwc's child display from its autostart hook.
+# Container exec otherwise inherits the outer Pixelflux display instead.
+Path(f"/tmp/pelagian-layout-{mode}.display").write_text(os.environ["WAYLAND_DISPLAY"])
 
 dialog = None
 command_path = Path(f"/tmp/pelagian-layout-{mode}.command")
