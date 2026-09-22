@@ -19,6 +19,8 @@ test:
 
 runtime-contract:
 	python3 -m unittest tests.test_reference_runtime tests.test_planner_only_boundary tests.test_consumer_session tests.test_layoutd_supervisor
+	bash -n tests/consumer-conformance/start-shell-stream.sh
+	python3 -m py_compile tests/consumer-conformance/verify-shell-session.py
 
 container-build:
 	$(ENGINE) build --build-arg VERSION=$(VERSION) --build-arg REVISION=$(REVISION) -f Containerfile -t $(IMAGE) .
