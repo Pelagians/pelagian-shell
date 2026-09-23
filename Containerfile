@@ -93,7 +93,6 @@ RUN set -eux; \
     test -x /usr/local/bin/pelagian-layoutd; \
     command -v dbus-daemon; \
     test -r /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py; \
-    test -f /etc/s6-overlay/s6-rc.d/legacy-cont-init/type; \
     test -f /etc/s6-overlay/s6-rc.d/svc-de/type; \
     test -f /etc/s6-overlay/s6-rc.d/svc-selkies/type; \
     test -r /usr/share/pelagian-shell/integrations/electron/window-chrome.mjs; \
