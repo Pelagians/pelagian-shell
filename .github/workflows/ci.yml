@@ -85,7 +85,7 @@ jobs:
       - name: Build and smoke-test without privileges
         run: ENGINE=podman make container-smoke
       - name: Regress rootless Podman with a relabeled /config bind mount
-        run: ENGINE=podman sh tests/container-bind-mount-smoke.sh pelagian-shell:0.1.0
+        run: ENGINE=podman bash -Eeuo pipefail tests/container-bind-mount-smoke.sh pelagian-shell:0.1.0
 
   hermes-consumer:
     needs: [check, changes]

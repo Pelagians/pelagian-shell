@@ -1,6 +1,11 @@
 #!/bin/sh
 set -eu
 
+if [ -n "${BASH_VERSION:-}" ]; then
+    set -E
+    trap 'rc=$?; printf "pelagian-shell bind-mount smoke: failed at line %s (exit %s): %s\n" "${BASH_LINENO[0]:-?}" "$rc" "$BASH_COMMAND" >&2' ERR
+fi
+
 image=${1:-${IMAGE:-pelagian-shell:local}}
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
@@ -76,12 +81,6 @@ cleanup() {
                         ;;
                 esac
             done
-            if command -v timeout >/dev/null 2>&1 && command -v selkies >/dev/null 2>&1; then
-                echo "--- direct Selkies startup probe"
-                timeout 12s s6-setuidgid abc with-contenv env \
-                    RUST_BACKTRACE=full WAYLAND_DISPLAY=wayland-1 \
-                    selkies --addr=localhost --mode=websockets 2>&1 || true
-            fi
             for proc in /proc/[0-9]*/comm; do
                 test -r "$proc" || continue
                 pid=${proc#/proc/}; pid=${pid%/comm}
