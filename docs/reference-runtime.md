@@ -19,6 +19,8 @@ make container-smoke VERSION=0.1.0
 
 Each engine runs fresh sessions at 1920×1080 and 1366×768. In-session output resizing and viewer disconnect/reconnect remain follow-up work. The restart test kills layoutd and waits for the session supervisor to replace it, without launching a daemon from the test.
 
+The rootless Podman job also runs `tests/container-bind-mount-smoke.sh` with a temporary host directory mounted as `/config:Z`. It checks the real `/init` path, the `/run/pelagian-shell` runtime, live Labwc/layoutd/Selkies health, a decoded frame, absence of the known permission error, and persistence across container recreation. The normal named-volume qualification remains in `container-smoke`.
+
 The Hermes consumer CI job builds the pinned Grotto source against the current Shell candidate, then exercises its real `/init` under Docker and rootless Podman. It requires observed native Wayland geometry, streamed frames, and a libsecret round trip across container restart. This is pre-publication qualification; Grotto's production base pin advances only after the Shell fix is merged and its new digest is published. Cage retains its own runtime catalog and Wine qualification gates.
 
 The assertions read Labwc's own window state and geometry rather than trusting layoutd's status file. The gate needs a running Docker or Podman daemon.

@@ -15,9 +15,9 @@ The outer Pelagian web UI remains the product shell. This repository deliberatel
 
 ## Ownership
 
-Labwc remains the compositor and authority for protocol, output, decoration, XWayland, and actual window geometry. `pelagian-layoutd` is not a second window manager. It owns only an in-memory model, classification, deterministic planning, and a narrow reconciliation request through a replaceable compositor adapter.
+Labwc remains the compositor and authority for protocol, output, decoration, XWayland, and actual window geometry. It owns Shell window chrome: ordinary applications use server decorations with title and close only, and Shell owns maximization and layout state. Consumers inherit `PELAGIAN_SHELL_WINDOW_CHROME=server`; Electron consumers can use the reference adapter in `integrations/electron/`. `pelagian-layoutd` is not a second window manager. It owns only an in-memory model, classification, deterministic planning, and a narrow reconciliation request through a replaceable compositor adapter.
 
-Consumers own application installation and launch, business logic, credentials, task execution, app-specific quirks, and acceptance tests. A consumer may install exactly one executable hook at `/usr/local/bin/pelagian-shell-consumer`; the Shell keeps the complete Labwc autostart and runs that hook in the background so an application failure cannot replace or terminate Shell-owned session services.
+Consumers own application installation and launch, business logic, credentials, task execution, app-specific quirks, and acceptance tests. A consumer may install exactly one executable hook at `/usr/local/bin/pelagian-shell-consumer`; Shell keeps the complete Labwc autostart, starts layoutd once, then waits for that hook as a child. If a consumer image enables LinuxServer's `RESTART_APP` watchdog, an exited hook lets the watchdog rerun the hook without spawning a second layoutd supervisor. Session IPC belongs under `/run/pelagian-shell`; persistent application state belongs under `/config`.
 
 The image dependency is one-way: **LinuxServer Selkies → Pelagian Shell → consumer**. Pelagian Shell never imports consumer code, and its release does not depend on Grotto, Cage, or any other downstream build. Consumers add their own runtime and application layers from an immutable Pelagian Shell image reference.
 

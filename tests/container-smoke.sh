@@ -53,10 +53,12 @@ name="pelagian-shell-smoke-$$"
 config_volume="$name-config"
 port=${PELAGIAN_SHELL_SMOKE_PORT:-13001}
 sentinel=/tmp/pelagian-shell-session-smoke
+producer_snapshot=
+producer_probe=
 
 labwc_state() {
     "$engine" exec --user abc \
-        --env XDG_RUNTIME_DIR=/config/.XDG \
+        --env XDG_RUNTIME_DIR=/run/pelagian-shell \
         "$name" python3 -c '
 import os, socket
 s = socket.socket(socket.AF_UNIX)
@@ -73,14 +75,102 @@ print(data.decode(), end="")
 '
 }
 
+assert_process_runtime() {
+    process=$1
+    pid=$2
+    case "$pid" in
+        ''|*[!0-9]*)
+            echo "pelagian-shell smoke: could not resolve $process PID: $pid" >&2
+            return 1
+            ;;
+    esac
+    "$engine" exec --user abc "$name" python3 -c '
+from pathlib import Path
+import sys
+entries = Path(f"/proc/{sys.argv[1]}/environ").read_bytes().split(b"\0")
+actual = [entry for entry in entries if entry.startswith(b"XDG_RUNTIME_DIR=")]
+expected = [b"XDG_RUNTIME_DIR=/run/pelagian-shell"]
+if actual != expected:
+    print(f"XDG_RUNTIME_DIR entries: {actual!r}; expected {expected!r}", file=sys.stderr)
+    raise SystemExit(1)
+' "$pid" || {
+        echo "pelagian-shell smoke: $process PID $pid has an invalid XDG_RUNTIME_DIR" >&2
+        return 1
+    }
+}
+
 dump_failure() {
     echo "pelagian-shell smoke: failure diagnostics" >&2
+    echo "--- last producer process snapshot" >&2
+    printf '%s\n' "$producer_snapshot" >&2
+    echo "--- direct PixelFlux startup probe" >&2
+    printf '%s\n' "$producer_probe" >&2
     "$engine" logs "$name" >&2 2>/dev/null || true
     labwc_state >&2 2>/dev/null || true
     "$engine" exec "$name" pelagian-layoutd status >&2 2>/dev/null || true
     "$engine" exec "$name" sh -c \
         'for file in /config/.local/state/pelagian-shell/output-mode.status /config/.local/state/pelagian-shell/output-mode.log /config/.local/state/pelagian-shell/labwc.log /config/.local/state/pelagian-shell/layoutd.log /config/.local/state/pelagian-shell/consumer.log /tmp/pelagian-stream-smoke.log; do test ! -f "$file" || { echo "--- $file"; tail -n 100 "$file"; }; done' \
         >&2 2>/dev/null || true
+    "$engine" exec "$name" sh -c '
+        echo "--- s6 active services"; s6-rc -a list 2>&1 || true
+        echo "--- Shell s6 definitions"
+        find /etc/s6-overlay/s6-rc.d/init-pelagian-runtime \
+            /etc/s6-overlay/s6-rc.d/user/contents.d \
+            /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d \
+            /etc/s6-overlay/s6-rc.d/svc-pulseaudio/dependencies.d \
+            /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d \
+            -maxdepth 2 -type f \( -name '*pelagian*' -o -path '*/init-pelagian-runtime/*' \) \
+            -print 2>&1 || true
+        echo "--- compiled Shell s6 graph"
+        if command -v s6-rc-db >/dev/null 2>&1; then
+            s6-rc-db list all | grep -E "^(init-pelagian-runtime|init-selkies-config|svc-de|svc-pulseaudio|svc-selkies|user)$" || true
+            for service in init-pelagian-runtime svc-de svc-pulseaudio svc-selkies; do
+                echo "$service dependencies"; s6-rc-db dependencies "$service" 2>&1 || true
+            done
+            echo "user bundle"; s6-rc-db contents user 2>&1 || true
+        fi
+        echo "--- s6 runtime directories"; find /run/s6-rc -maxdepth 3 -type d -print 2>&1 || true
+        echo "--- session env files"; for key in XDG_RUNTIME_DIR WAYLAND_DISPLAY PIXELFLUX_WAYLAND CUSTOM_WS_PORT LD_PRELOAD; do
+            if test -r "/run/s6/container_environment/$key"; then
+                printf "%s=" "$key"; cat "/run/s6/container_environment/$key"
+            fi
+        done
+        if test -r /run/s6/container_environment/CUSTOM_WS_PORT; then echo; fi
+        echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
+        ls -la /run/pelagian-shell 2>&1 || true
+        echo "--- Wayland sockets"
+        find /run/pelagian-shell /config/.XDG -maxdepth 1 -type s -print 2>&1 || true
+        echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
+        echo "--- producer process runtime"
+        for service in svc-de svc-pulseaudio svc-selkies; do
+            echo "$service supervisor status"
+            s6-svstat "/run/service/$service" 2>&1 || true
+        done
+        ls -l /defaults/pid /defaults/native 2>&1 || true
+        ls -la /run/pelagian-shell/pulse /config/.XDG /run/user 2>&1 || true
+        for proc in /proc/[0-9]*/comm; do
+            test -r "$proc" || continue
+            pid=${proc#/proc/}; pid=${pid%/comm}
+            IFS= read -r process < "$proc" || true
+            case "$process" in
+                selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
+                    echo "$process PID $pid"
+                    tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true
+                    echo
+                    tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
+                        grep -E "^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND|PULSE_SERVER|DBUS_SESSION_BUS_ADDRESS)=" || true
+                    ;;
+            esac
+        done
+        echo "--- remaining process states"
+        for proc in /proc/[0-9]*/comm; do
+            test -r "$proc" || continue
+            pid=${proc#/proc/}; pid=${pid%/comm}
+            IFS= read -r command < "$proc" || true
+            printf "%s %s " "$pid" "$command"
+            cat "/proc/$pid/wchan" 2>/dev/null || true
+        done
+    ' >&2 2>/dev/null || true
 }
 
 finish() {
@@ -240,7 +330,7 @@ wait_counts() {
 launch_fixture() {
     "$engine" exec -d --user abc \
         --env GDK_BACKEND=wayland \
-        --env XDG_RUNTIME_DIR=/config/.XDG \
+        --env XDG_RUNTIME_DIR=/run/pelagian-shell \
         --env WAYLAND_DISPLAY="$fixture_display" \
         "$name" /usr/local/bin/pelagian-shell-consumer "$1"
 }
@@ -317,7 +407,7 @@ labwc_action() {
     toplevel_id=$(python3 -c \
         'import json, sys; state=json.loads(sys.argv[1]); print(next(view["id"] for view in state["views"] if view["title"] == sys.argv[2]))' \
         "$state" "$title")
-    "$engine" exec -i --user abc --env XDG_RUNTIME_DIR=/config/.XDG \
+    "$engine" exec -i --user abc --env XDG_RUNTIME_DIR=/run/pelagian-shell \
         "$name" python3 - "$toplevel_id" "$action" <<'PY'
 import json
 import os
@@ -453,8 +543,10 @@ PY
     --volume "$config_volume:/config" \
     "$image" -c '
 set -eu
-mkdir -p /config/.config/labwc
+mkdir -p /config/.config/labwc /config/.XDG /config/.local/share/keyrings
 printf "%s\n" preserve-me > /config/pelagian-shell-smoke.sentinel
+printf "%s\n" obsolete-runtime-state > /config/.XDG/old-runtime-sentinel
+printf "%s\n" persistent-keyring > /config/.local/share/keyrings/keyring.sentinel
 printf "%s\n" "<stale />" > /config/.config/labwc/rc.xml
 '
 
@@ -466,6 +558,7 @@ mount_mode=ro
     --env "PUID=$(id -u)" \
     --env "PGID=$(id -g)" \
     --env PIXELFLUX_WAYLAND=true \
+    --env RUST_BACKTRACE=1 \
     --env SELKIES_MANUAL_WIDTH="$width" \
     --env SELKIES_MANUAL_HEIGHT="$height" \
     --env PELAGIAN_SHELL_LABWC_VERBOSE=true \
@@ -474,6 +567,23 @@ mount_mode=ro
     --volume "$root/tests/layout-fixture.py:/usr/local/bin/pelagian-shell-consumer:$mount_mode" \
     --volume "$root/tests/selkies-smoke-client.py:/tmp/selkies-smoke-client.py:$mount_mode" \
     "$image" >/dev/null
+
+runtime_ready=
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+    if "$engine" exec --user abc "$name" sh -c \
+        'test "${XDG_RUNTIME_DIR:-}" = /run/pelagian-shell && touch "$XDG_RUNTIME_DIR/.write-probe" && rm "$XDG_RUNTIME_DIR/.write-probe"' \
+        >/dev/null 2>&1; then
+        runtime_ready=true
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+done
+[ "$runtime_ready" = true ] || {
+    echo "pelagian-shell smoke: abc cannot write to the private runtime directory" >&2
+    exit 1
+}
 
 ready=
 attempt=0
@@ -489,11 +599,47 @@ while [ "$attempt" -lt 60 ]; do
         ready=1
         break
     fi
+    if [ $((attempt % 5)) -eq 0 ]; then
+        producer_snapshot=$("$engine" exec --user abc "$name" sh -c '
+            echo "svc-selkies supervisor"; s6-svstat /run/service/svc-selkies 2>&1 || true
+            for proc in /proc/[0-9]*/comm; do
+                test -r "$proc" || continue
+                pid=${proc#/proc/}; pid=${pid%/comm}
+                IFS= read -r process < "$proc" || true
+                case "$process" in
+                    selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
+                        echo "$process PID $pid"
+                        grep -E "^(Uid|Gid|Groups):" "/proc/$pid/status" 2>/dev/null || true
+                        tr "\\000" "\\n" < "/proc/$pid/environ" 2>/dev/null |
+                            grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND|LD_PRELOAD|DBUS_SESSION_BUS_ADDRESS)=" || true
+                        ;;
+                esac
+            done
+        ' 2>&1 || true)
+    fi
     attempt=$((attempt + 1))
     sleep 1
 done
 if [ -z "$ready" ]; then
     echo "pelagian-shell smoke: Labwc, session autostart, or Selkies HTTPS did not become ready" >&2
+    producer_probe=$("$engine" exec "$name" sh -c '
+        echo "--- installed PixelFlux package"
+        /lsiopy/bin/pip show pixelflux 2>&1 | sed -n "1,8p" || true
+        if ! command -v strace >/dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y -qq strace >/dev/null || {
+                echo "strace diagnostic unavailable"
+                exit 0
+            }
+        fi
+        echo "--- direct Selkies startup probe"
+        timeout 12s strace -f -o /tmp/pelagian-selkies.strace \
+            -e trace=%file,socket,bind,connect \
+            s6-setuidgid abc with-contenv env RUST_BACKTRACE=full WAYLAND_DISPLAY=wayland-1 \
+            selkies --addr=localhost --mode=websockets
+        echo "direct Selkies exit=$?"
+        echo "--- denied file and socket operations"
+        grep -E "EACCES|EPERM|pelagian-shell|wayland" /tmp/pelagian-selkies.strace | tail -n 80 || true
+    ' 2>&1 || true)
     exit 1
 fi
 
@@ -517,12 +663,28 @@ fi
 "$engine" exec "$name" cat /tmp/pelagian-stream-smoke/ready
 fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
 [ -n "$fixture_display" ]
-"$engine" exec "$name" test -S "/config/.XDG/$fixture_display"
+"$engine" exec "$name" test -S /run/pelagian-shell/labwc.sock
+"$engine" exec "$name" test -S "/run/pelagian-shell/$fixture_display"
+"$engine" exec "$name" test -S /run/pelagian-shell/bus
+assert_process_runtime Labwc "$("$engine" exec "$name" pgrep -xo labwc)"
+assert_process_runtime PulseAudio "$("$engine" exec "$name" pgrep -xo pulseaudio)"
+assert_process_runtime Selkies "$("$engine" exec "$name" pgrep -o -f '[s]elkies --addr=localhost')"
+assert_process_runtime layoutd "$("$engine" exec "$name" cat /config/.local/state/pelagian-shell/layoutd.pid)"
+assert_process_runtime session-D-Bus "$("$engine" exec "$name" pgrep -f '[d]bus-daemon --session --address=unix:path=/run/pelagian-shell/bus')"
+"$engine" exec "$name" sh -c '
+test "$(stat -c %u:%g:%a /run/pelagian-shell)" = "$(id -u abc):$(id -g abc):700"
+test "$(env | sed -n "s/^XDG_RUNTIME_DIR=//p")" = /run/pelagian-shell
+test "$(env | sed -n "s/^PELAGIAN_SHELL_WINDOW_CHROME=//p")" = server
+test ! -e /config/.XDG/old-runtime-sentinel
+test ! -e /config/.XDG
+test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
+'
 
 wait_layout 1 "$width" "$height" One 0
 wait_counts 1 0
 
-"$engine" exec "$name" pelagian-shellctl status >/dev/null
+shell_status=$("$engine" exec "$name" pelagian-shellctl status)
+printf '%s\n' "$shell_status" | grep -q '"window_chrome_policy":"server"'
 "$engine" exec "$name" pelagian-shellctl config show >/dev/null
 status=$("$engine" exec "$name" pelagian-layoutd status)
 if printf '%s\n' "$status" | grep -q planner_only; then
@@ -617,7 +779,7 @@ done
 fixture_pid=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.pid)
 "$engine" exec "$name" kill "$fixture_pid"
 "$engine" exec -d --user abc \
-    --env XDG_RUNTIME_DIR=/config/.XDG --env WAYLAND_DISPLAY="$fixture_display" \
+    --env XDG_RUNTIME_DIR=/run/pelagian-shell --env WAYLAND_DISPLAY="$fixture_display" \
     "$name" /usr/local/libexec/pelagian-late-configure
 wait_late_configure stale
 "$engine" exec "$name" test -f /tmp/pelagian-late-configure.stale

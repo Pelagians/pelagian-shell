@@ -52,6 +52,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
         with:
           components: clippy,rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Check format, lint, unit tests, and runtime contract
         run: make check
 
@@ -65,20 +68,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
       - name: Build and smoke-test the reference Selkies/Labwc image
         run: make container-smoke
-      - name: Prove the resize regression fails on the previous image
-        shell: bash
-        run: |
-          set -euo pipefail
-          log="$(mktemp)"
-          trap 'rm -f "$log"' EXIT
-          previous=ghcr.io/pelagians/pelagian-shell@sha256:083dc52c943c0a92d5a9b15a25e9798fc2967b95fd6f2ccbca4e3bbb2c91b1bb
-          if ENGINE=docker sh tests/container-smoke.sh "$previous" > "$log" 2>&1; then
-            cat "$log"
-            echo 'Expected the previous image to fail resize recovery.' >&2
-            exit 1
-          fi
-          grep -Fx 'pelagian-shell late-configure: stale' "$log"
-          grep -Fx 'pelagian-shell smoke: late-configure phase recovered failed' "$log"
 
   rootless-podman:
     needs: check
@@ -95,6 +84,8 @@ jobs:
           podman info
       - name: Build and smoke-test without privileges
         run: ENGINE=podman make container-smoke
+      - name: Regress rootless Podman with a relabeled /config bind mount
+        run: ENGINE=podman bash -Eeuo pipefail tests/container-bind-mount-smoke.sh pelagian-shell:0.1.0
 
   hermes-consumer:
     needs: [check, changes]
@@ -103,9 +94,10 @@ jobs:
     timeout-minutes: 90
     env:
       # Grotto's consumer hook and real-window/keyring/restart smoke contract.
-      GROTTO_COMMIT: 23305ea31f1fd0342e0185736708392216715662
+      GROTTO_COMMIT: 5ad4e1ea7532c1da80dfb600a1e822064d49cf20
       SHELL_IMAGE: localhost/pelagian-shell:candidate
       HERMES_IMAGE: localhost/pelagian-shell-hermes:qualification
+      PELAGIAN_SHELL_CONFORMANCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:

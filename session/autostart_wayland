@@ -2,6 +2,9 @@
 set -eu
 
 # Labwc runs this through sh. Keep it POSIX; consumers own only this hook.
+export XDG_RUNTIME_DIR=/run/pelagian-shell
+export PELAGIAN_SHELL_WINDOW_CHROME=server
+
 if [ -n "${PELAGIAN_SHELL_SESSION_SENTINEL:-}" ]; then
     umask 077
     : > "${PELAGIAN_SHELL_SESSION_SENTINEL}"
@@ -45,17 +48,18 @@ if [ -x "$layoutd" ] || [ -x "$consumer_hook" ]; then
 fi
 
 if [ -x "$layoutd" ]; then
-    /usr/local/bin/pelagian-shell-supervise-layoutd >> "$state_dir/layoutd-supervisor.log" 2>&1 &
+    if ! pgrep -f '[p]elagian-shell-supervise-layoutd' >/dev/null 2>&1; then
+        /usr/local/bin/pelagian-shell-supervise-layoutd >> "$state_dir/layoutd-supervisor.log" 2>&1 &
+    fi
 fi
 
 if [ -x "$consumer_hook" ]; then
     rm -f "$state_dir/consumer.status"
-    (
-        set +e
-        "$consumer_hook" >> "$state_dir/consumer.log" 2>&1 &
-        consumer_pid=$!
-        printf '%s\n' "$consumer_pid" > "$state_dir/consumer.pid"
-        wait "$consumer_pid"
-        printf '%s\n' "$?" > "$state_dir/consumer.status"
-    ) &
+    "$consumer_hook" >> "$state_dir/consumer.log" 2>&1 &
+    consumer_pid=$!
+    printf '%s\n' "$consumer_pid" > "$state_dir/consumer.pid"
+    consumer_status=0
+    wait "$consumer_pid" || consumer_status=$?
+    printf '%s\n' "$consumer_status" > "$state_dir/consumer.status"
+    exit "$consumer_status"
 fi

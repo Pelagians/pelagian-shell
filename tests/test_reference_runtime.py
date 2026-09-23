@@ -153,6 +153,9 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertEqual(":close", root.findtext("./theme/titlebar/layout"))
         self.assertEqual("yes", root.findtext("./theme/titlebar/showTitle"))
         self.assertEqual("titlebar", root.findtext("./theme/maximizedDecoration"))
+        for rule in root.findall("./windowRules/windowRule"):
+            for selector in ("app_id", "appId", "identifier", "title", "class"):
+                self.assertNotIn(selector, rule.attrib)
 
         self.assertEqual(
             ["Workspace 1"],
@@ -234,6 +237,60 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("/config/.config/labwc/autostart", init)
         self.assertIn("gtk-3.0/settings.ini", init)
         self.assertIn("gtk-4.0/settings.ini", init)
+
+    def test_session_ipc_and_window_chrome_are_shell_owned(self) -> None:
+        containerfile = (ROOT / "Containerfile").read_text(encoding="utf-8")
+        runtime_service = (ROOT / "session/s6-rc.d/init-pelagian-runtime/run").read_text(
+            encoding="utf-8"
+        )
+        runtime_up = (ROOT / "session/s6-rc.d/init-pelagian-runtime/up").read_text(
+            encoding="utf-8"
+        ).strip()
+        runtime_dependencies = ROOT / "session/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init"
+        selkies_config_dependency = ROOT / "session/s6-rc.d/init-pelagian-runtime/dependencies.d/init-selkies-config"
+        pulseaudio_runtime_dependency = ROOT / "session/s6-rc.d/svc-pulseaudio/dependencies.d/init-pelagian-runtime"
+        startwm = (ROOT / "session/startwm_wayland.sh").read_text(encoding="utf-8")
+        autostart = (ROOT / "session/autostart_wayland").read_text(encoding="utf-8")
+        bind_smoke = (ROOT / "tests/container-bind-mount-smoke.sh").read_text(
+            encoding="utf-8"
+        )
+        bind_consumer = (ROOT / "tests/bind-mount-consumer.sh").read_text(encoding="utf-8")
+        self.assertIn("XDG_RUNTIME_DIR=/run/pelagian-shell", containerfile)
+        self.assertIn("PELAGIAN_SHELL_WINDOW_CHROME=server", containerfile)
+        self.assertEqual("/etc/s6-overlay/s6-rc.d/init-pelagian-runtime/run", runtime_up)
+        self.assertIn("check-electron-chrome.py /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py", containerfile)
+        self.assertTrue(runtime_dependencies.is_file())
+        self.assertTrue(selkies_config_dependency.is_file())
+        self.assertTrue(pulseaudio_runtime_dependency.is_file())
+        self.assertIn("/run/s6/container_environment", runtime_service)
+        self.assertIn("init-selkies-config", runtime_service)
+        self.assertIn('"$environment_dir/XDG_RUNTIME_DIR"', runtime_service)
+        self.assertIn('"$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"', runtime_service)
+        self.assertIn("printf '%s' \"$runtime_dir\"", runtime_service)
+        self.assertIn("printf '%s' server", runtime_service)
+        self.assertIn("chmod 0700", runtime_service)
+        self.assertIn("rm -rf -- /config/.XDG", runtime_service)
+        self.assertIn("export XDG_RUNTIME_DIR=/run/pelagian-shell", startwm)
+        self.assertIn("export PELAGIAN_SHELL_WINDOW_CHROME=server", autostart)
+        self.assertIn("unix:path=${XDG_RUNTIME_DIR}/bus", startwm)
+        self.assertIn("$host_config:/config:Z", bind_smoke)
+        self.assertIn("/run/pelagian-shell/labwc.sock", bind_smoke)
+        self.assertIn("bind-mount-persistence.sentinel", bind_smoke)
+        self.assertIn("/config/.XDG", runtime_service)
+        self.assertIn("test ! -e /config/.XDG", bind_smoke)
+        self.assertIn("assert_runtime_writable_as_abc", bind_smoke)
+        self.assertIn("tests/bind-mount-consumer.sh", bind_smoke)
+        self.assertIn("XDG_RUNTIME_DIR=%s", bind_consumer)
+        self.assertIn("DBUS_SESSION_BUS_ADDRESS=%s", bind_consumer)
+
+    def test_electron_adapter_and_bind_smoke_scripts_parse(self) -> None:
+        subprocess.run(
+            ["bash", "-n", str(ROOT / "session/s6-rc.d/init-pelagian-runtime/run")],
+            check=True,
+        )
+        subprocess.run(["sh", "-n", str(ROOT / "tests/container-bind-mount-smoke.sh")], check=True)
+        subprocess.run(["sh", "-n", str(ROOT / "tests/bind-mount-consumer.sh")], check=True)
+        subprocess.run(["node", "--check", str(ROOT / "integrations/electron/window-chrome.mjs")], check=True)
 
     def test_wine_defaults_are_explicit_and_do_not_require_msstyles(self) -> None:
         apply_defaults = (ROOT / "wine/apply-defaults.sh").read_text(encoding="utf-8")

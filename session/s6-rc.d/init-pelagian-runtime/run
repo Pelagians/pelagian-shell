@@ -1,0 +1,27 @@
+#!/usr/bin/with-contenv bash
+set -Eeuo pipefail
+
+runtime_dir=/run/pelagian-shell
+environment_dir=/run/s6/container_environment
+
+# Run after LinuxServer's init-selkies-config, which resets XDG_RUNTIME_DIR to
+# /config/.XDG, and before either the Wayland producer or desktop service
+# starts. /run is container-local; never store session IPC in /config.
+install -d -o abc -g abc -m 0700 "$runtime_dir"
+find "$runtime_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+chown abc:abc "$runtime_dir"
+chmod 0700 "$runtime_dir"
+
+# LinuxServer creates this legacy runtime path during init-selkies-config. It
+# contains only session IPC; remove it after that initializer has completed so
+# upgrades cannot leave a usable runtime boundary under persistent data.
+rm -rf -- /config/.XDG
+
+# The image ENV is the early default. Publish the Shell policy through s6's
+# environment directory as well so every with-contenv service sees the same
+# value, even when inherited LinuxServer defaults target /config/.XDG.
+install -d -m 0755 "$environment_dir"
+# s6 envdir treats every byte in these files as the value. A trailing newline
+# becomes part of XDG_RUNTIME_DIR and makes Wayland socket paths invalid.
+printf '%s' "$runtime_dir" > "$environment_dir/XDG_RUNTIME_DIR"
+printf '%s' server > "$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"

@@ -31,6 +31,10 @@ fn show_config() -> Result<(), ConfigError> {
 fn show_status() -> Result<(), ConfigError> {
     let profile = profile_from_env();
     let resolved = resolve(roots_from_env(), &profile)?;
+    let window_chrome_policy = match env::var("PELAGIAN_SHELL_WINDOW_CHROME").as_deref() {
+        Ok("server") => "server",
+        _ => "unset",
+    };
     let layoutd = env::var_os("PELAGIAN_LAYOUTD_BIN").unwrap_or_else(|| "pelagian-layoutd".into());
     let runtime = Command::new(layoutd)
         .arg("status")
@@ -45,7 +49,7 @@ fn show_status() -> Result<(), ConfigError> {
                 .to_owned()
         });
     println!(
-        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"labwc-ipc\",\"runtime\":{runtime}}}",
+        "{{\"schema_version\":1,\"profile\":\"{profile}\",\"layout_mode\":\"{}\",\"capabilities\":{{\"wine\":{}}},\"compositor_adapter\":\"labwc-ipc\",\"window_chrome_policy\":\"{window_chrome_policy}\",\"runtime\":{runtime}}}",
         resolved.config.layout.mode.as_str(),
         resolved.config.capabilities.wine,
     );
