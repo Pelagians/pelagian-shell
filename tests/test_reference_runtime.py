@@ -254,6 +254,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         bind_smoke = (ROOT / "tests/container-bind-mount-smoke.sh").read_text(
             encoding="utf-8"
         )
+        bind_consumer = (ROOT / "tests/bind-mount-consumer.sh").read_text(encoding="utf-8")
         self.assertIn("XDG_RUNTIME_DIR=/run/pelagian-shell", containerfile)
         self.assertIn("PELAGIAN_SHELL_WINDOW_CHROME=server", containerfile)
         self.assertEqual("/etc/s6-overlay/s6-rc.d/init-pelagian-runtime/run", runtime_up)
@@ -278,6 +279,9 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("/config/.XDG", runtime_service)
         self.assertIn("test ! -e /config/.XDG", bind_smoke)
         self.assertIn("assert_runtime_writable_as_abc", bind_smoke)
+        self.assertIn("tests/bind-mount-consumer.sh", bind_smoke)
+        self.assertIn("XDG_RUNTIME_DIR=%s", bind_consumer)
+        self.assertIn("DBUS_SESSION_BUS_ADDRESS=%s", bind_consumer)
 
     def test_electron_adapter_and_bind_smoke_scripts_parse(self) -> None:
         subprocess.run(
@@ -285,6 +289,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             check=True,
         )
         subprocess.run(["sh", "-n", str(ROOT / "tests/container-bind-mount-smoke.sh")], check=True)
+        subprocess.run(["sh", "-n", str(ROOT / "tests/bind-mount-consumer.sh")], check=True)
         subprocess.run(["node", "--check", str(ROOT / "integrations/electron/window-chrome.mjs")], check=True)
 
     def test_wine_defaults_are_explicit_and_do_not_require_msstyles(self) -> None:

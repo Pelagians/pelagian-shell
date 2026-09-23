@@ -23,6 +23,7 @@ runtime-contract:
 	node --test tests/test_electron_window_chrome.mjs
 	bash -n session/s6-rc.d/init-pelagian-runtime/up
 	sh -n tests/container-bind-mount-smoke.sh
+	sh -n tests/bind-mount-consumer.sh
 	bash -n tests/consumer-conformance/start-shell-stream.sh
 	python3 -m py_compile tests/consumer-conformance/verify-shell-session.py
 

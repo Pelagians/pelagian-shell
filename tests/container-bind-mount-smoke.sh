@@ -176,7 +176,7 @@ start_container() {
         --env SELKIES_MANUAL_WIDTH=1920 --env SELKIES_MANUAL_HEIGHT=1080 \
         --env PELAGIAN_SHELL_LABWC_VERBOSE=true \
         --volume "$host_config:/config:Z" \
-        --volume "$root/tests/layout-fixture.py:/usr/local/bin/pelagian-shell-consumer:ro,z" \
+        --volume "$root/tests/bind-mount-consumer.sh:/usr/local/bin/pelagian-shell-consumer:ro,z" \
         --volume "$root/tests/selkies-smoke-client.py:/tmp/selkies-smoke-client.py:ro,z" \
         "$image" >/dev/null
     port=$(podman port "$name" 3001/tcp | sed 's/.*://')
@@ -209,7 +209,7 @@ wait_for_session() {
         if podman exec "$name" pgrep -x labwc >/dev/null 2>&1 \
             && podman exec "$name" test -S /run/pelagian-shell/labwc.sock \
             && printf '%s\n' "$status" | python3 -c \
-                'import json,sys; s=json.load(sys.stdin); assert s["adapter_connected"] and s["layoutd"] == "healthy" and s["reconciliation"] == "healthy"' \
+                'import json,sys; s=json.load(sys.stdin); assert s["adapter_connected"] and s["layoutd"] == "healthy" and s["reconciliation"] == "healthy" and s["managed_windows"] == 0 and s["floating_windows"] == 0' \
                 2>/dev/null \
             && curl --fail --silent --insecure --max-time 3 "https://127.0.0.1:${port}/" >/dev/null 2>&1; then
             ready=true
@@ -254,13 +254,17 @@ test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyrin
     assert_no_wayland_permission_error
 }
 
-qualify_stream_and_window() {
+qualify_stream_and_session() {
     CONTAINER_ENGINE=podman "$root/tests/consumer-conformance/start-shell-stream.sh" \
         "$name" "$root/tests/selkies-smoke-client.py"
-    podman cp "$root/tests/consumer-conformance/verify-shell-session.py" \
-        "$name:/tmp/verify-shell-session.py"
-    podman exec --user abc "$name" python3 /tmp/verify-shell-session.py \
-        'Pelagian Fixture One' --native
+    [ "$(podman inspect --format '{{.State.Running}}' "$name")" = true ]
+    podman exec "$name" sh -c '
+        grep -Fx "XDG_RUNTIME_DIR=/run/pelagian-shell" /config/.local/state/pelagian-shell/bind-consumer-environment
+        grep -Fx "PELAGIAN_SHELL_WINDOW_CHROME=server" /config/.local/state/pelagian-shell/bind-consumer-environment
+        grep -Fx "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/pelagian-shell/bus" /config/.local/state/pelagian-shell/bind-consumer-environment
+    '
+    assert_process_runtime consumer \
+        "$(podman exec "$name" cat /config/.local/state/pelagian-shell/consumer.pid)"
     podman exec "$name" test "$(cat /config/bind-mount-persistence.sentinel)" = persisted-after-recreate
     podman exec "$name" test -S /run/pelagian-shell/wayland-1
     assert_no_wayland_permission_error
@@ -269,11 +273,11 @@ qualify_stream_and_window() {
 start_container
 assert_runtime_writable_as_abc
 wait_for_session
-qualify_stream_and_window
+qualify_stream_and_session
 podman rm -f "$name" >/dev/null
 start_container
 assert_runtime_writable_as_abc
 wait_for_session
-qualify_stream_and_window
+qualify_stream_and_session
 
 printf 'pelagian-shell bind-mount smoke: PASS image=%s rootless-podman config=%s\n' "$image" "$host_config"
