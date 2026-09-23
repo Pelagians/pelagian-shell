@@ -266,13 +266,16 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn('"$environment_dir/XDG_RUNTIME_DIR"', runtime_service)
         self.assertIn('"$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"', runtime_service)
         self.assertIn("chmod 0700", runtime_service)
+        self.assertIn("rm -rf -- /config/.XDG", runtime_service)
         self.assertIn("export XDG_RUNTIME_DIR=/run/pelagian-shell", startwm)
         self.assertIn("export PELAGIAN_SHELL_WINDOW_CHROME=server", autostart)
         self.assertIn("unix:path=${XDG_RUNTIME_DIR}/bus", startwm)
         self.assertIn("$host_config:/config:Z", bind_smoke)
         self.assertIn("/run/pelagian-shell/labwc.sock", bind_smoke)
         self.assertIn("bind-mount-persistence.sentinel", bind_smoke)
-        self.assertNotIn("rm -rf /config/.XDG", runtime_service)
+        self.assertIn("/config/.XDG", runtime_service)
+        self.assertIn("test ! -e /config/.XDG", bind_smoke)
+        self.assertIn("assert_runtime_writable_as_abc", bind_smoke)
 
     def test_electron_adapter_and_bind_smoke_scripts_parse(self) -> None:
         subprocess.run(

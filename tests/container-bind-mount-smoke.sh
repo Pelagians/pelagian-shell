@@ -48,6 +48,13 @@ cleanup() {
             done
             echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
             ls -la /run/pelagian-shell 2>&1 || true
+            echo "--- runtime ownership and abc write probe"; stat -c '%u:%g:%a %n' /run/pelagian-shell /config/.XDG 2>&1 || true
+            s6-setuidgid abc touch /run/pelagian-shell/.smoke-write 2>&1 || true
+            s6-setuidgid abc rm -f /run/pelagian-shell/.smoke-write 2>&1 || true
+            echo "--- supervised Selkies launch environment"
+            sed -n '1,220p' /run/service/svc-selkies/run 2>&1 || true
+            with-contenv env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
+            s6-envdir -fn /run/s6/container_environment env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
             echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
             for service in svc-de svc-pulseaudio svc-selkies; do
                 echo "$service supervisor status"
@@ -63,6 +70,7 @@ cleanup() {
                 case "$process" in
                     selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
                         echo "$process PID $pid"
+                        grep -E "^(Uid|Gid|Groups):" "/proc/$pid/status" 2>/dev/null || true
                         tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true
                         echo
                         tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
@@ -70,6 +78,11 @@ cleanup() {
                         ;;
                 esac
             done
+            if command -v timeout >/dev/null 2>&1 && test -x /lsiopy/bin/python3; then
+                echo "--- direct PixelFlux startup probe"
+                timeout 12s s6-setuidgid abc env XDG_RUNTIME_DIR=/run/pelagian-shell RUST_BACKTRACE=full \
+                    /lsiopy/bin/python3 -c "from pixelflux import ensure_wayland_display; print(ensure_wayland_display(width=1920, height=1080, auto_gpu=\"true\"), flush=True)" 2>&1 || true
+            fi
             for proc in /proc/[0-9]*/comm; do
                 test -r "$proc" || continue
                 pid=${proc#/proc/}; pid=${pid%/comm}
@@ -128,6 +141,21 @@ start_container() {
     [ -n "$port" ]
 }
 
+assert_runtime_writable_as_abc() {
+    attempt=0
+    while [ "$attempt" -lt 30 ]; do
+        if podman exec --user abc --env XDG_RUNTIME_DIR=/run/pelagian-shell "$name" sh -c \
+            'test "$(stat -c %u:%g:%a "$XDG_RUNTIME_DIR")" = "$(id -u):$(id -g):700" && touch "$XDG_RUNTIME_DIR/.write-probe" && rm "$XDG_RUNTIME_DIR/.write-probe"' \
+            >/dev/null 2>&1; then
+            return 0
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.1
+    done
+    echo "pelagian-shell bind-mount smoke: abc cannot write to the private runtime directory" >&2
+    return 1
+}
+
 wait_for_session() {
     attempt=0
     ready=false
@@ -168,6 +196,7 @@ for socket in "$@"; do
 done
 test "$found" = true
 test ! -e /config/.XDG/legacy-sentinel
+test ! -e /config/.XDG
 test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
 '
     podman exec "$name" pelagian-shellctl status | grep -Fq '"window_chrome_policy":"server"'
@@ -196,10 +225,12 @@ qualify_stream_and_window() {
 }
 
 start_container
+assert_runtime_writable_as_abc
 wait_for_session
 qualify_stream_and_window
 podman rm -f "$name" >/dev/null
 start_container
+assert_runtime_writable_as_abc
 wait_for_session
 qualify_stream_and_window
 

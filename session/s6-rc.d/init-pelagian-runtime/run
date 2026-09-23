@@ -12,6 +12,11 @@ find "$runtime_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 chown abc:abc "$runtime_dir"
 chmod 0700 "$runtime_dir"
 
+# LinuxServer creates this legacy runtime path during init-selkies-config. It
+# contains only session IPC; remove it after that initializer has completed so
+# upgrades cannot leave a usable runtime boundary under persistent data.
+rm -rf -- /config/.XDG
+
 # The image ENV is the early default. Publish the Shell policy through s6's
 # environment directory as well so every with-contenv service sees the same
 # value, even when inherited LinuxServer defaults target /config/.XDG.

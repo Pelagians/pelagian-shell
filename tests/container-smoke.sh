@@ -119,6 +119,13 @@ dump_failure() {
         if test -r /run/s6/container_environment/CUSTOM_WS_PORT; then echo; fi
         echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
         ls -la /run/pelagian-shell 2>&1 || true
+        echo "--- runtime ownership and abc write probe"; stat -c '%u:%g:%a %n' /run/pelagian-shell /config/.XDG 2>&1 || true
+        s6-setuidgid abc touch /run/pelagian-shell/.smoke-write 2>&1 || true
+        s6-setuidgid abc rm -f /run/pelagian-shell/.smoke-write 2>&1 || true
+        echo "--- supervised Selkies launch environment"
+        sed -n '1,220p' /run/service/svc-selkies/run 2>&1 || true
+        with-contenv env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
+        s6-envdir -fn /run/s6/container_environment env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
         echo "--- Wayland sockets"
         find /run/pelagian-shell /config/.XDG -maxdepth 1 -type s -print 2>&1 || true
         echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
@@ -136,6 +143,7 @@ dump_failure() {
             case "$process" in
                 selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
                     echo "$process PID $pid"
+                    grep -E "^(Uid|Gid|Groups):" "/proc/$pid/status" 2>/dev/null || true
                     tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true
                     echo
                     tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
@@ -143,6 +151,11 @@ dump_failure() {
                     ;;
             esac
         done
+        if command -v timeout >/dev/null 2>&1 && test -x /lsiopy/bin/python3; then
+            echo "--- direct PixelFlux startup probe"
+            timeout 12s s6-setuidgid abc env XDG_RUNTIME_DIR=/run/pelagian-shell RUST_BACKTRACE=full \
+                /lsiopy/bin/python3 -c "from pixelflux import ensure_wayland_display; print(ensure_wayland_display(width=1920, height=1080, auto_gpu=\"true\"), flush=True)" 2>&1 || true
+        fi
         echo "--- remaining process states"
         for proc in /proc/[0-9]*/comm; do
             test -r "$proc" || continue
@@ -549,6 +562,23 @@ mount_mode=ro
     --volume "$root/tests/selkies-smoke-client.py:/tmp/selkies-smoke-client.py:$mount_mode" \
     "$image" >/dev/null
 
+runtime_ready=
+attempt=0
+while [ "$attempt" -lt 30 ]; do
+    if "$engine" exec --user abc "$name" sh -c \
+        'test "${XDG_RUNTIME_DIR:-}" = /run/pelagian-shell && touch "$XDG_RUNTIME_DIR/.write-probe" && rm "$XDG_RUNTIME_DIR/.write-probe"' \
+        >/dev/null 2>&1; then
+        runtime_ready=true
+        break
+    fi
+    attempt=$((attempt + 1))
+    sleep 0.1
+done
+[ "$runtime_ready" = true ] || {
+    echo "pelagian-shell smoke: abc cannot write to the private runtime directory" >&2
+    exit 1
+}
+
 ready=
 attempt=0
 while [ "$attempt" -lt 60 ]; do
@@ -604,6 +634,7 @@ test "$(stat -c %u:%g:%a /run/pelagian-shell)" = "$(id -u abc):$(id -g abc):700"
 test "$(env | sed -n "s/^XDG_RUNTIME_DIR=//p")" = /run/pelagian-shell
 test "$(env | sed -n "s/^PELAGIAN_SHELL_WINDOW_CHROME=//p")" = server
 test ! -e /config/.XDG/old-runtime-sentinel
+test ! -e /config/.XDG
 test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
 '
 
