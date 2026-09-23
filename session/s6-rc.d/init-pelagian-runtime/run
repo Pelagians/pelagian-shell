@@ -21,5 +21,7 @@ rm -rf -- /config/.XDG
 # environment directory as well so every with-contenv service sees the same
 # value, even when inherited LinuxServer defaults target /config/.XDG.
 install -d -m 0755 "$environment_dir"
-printf '%s\n' "$runtime_dir" > "$environment_dir/XDG_RUNTIME_DIR"
-printf '%s\n' server > "$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"
+# s6 envdir treats every byte in these files as the value. A trailing newline
+# becomes part of XDG_RUNTIME_DIR and makes Wayland socket paths invalid.
+printf '%s' "$runtime_dir" > "$environment_dir/XDG_RUNTIME_DIR"
+printf '%s' server > "$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"

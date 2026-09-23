@@ -119,10 +119,17 @@ assert_no_wayland_permission_error() {
 assert_process_runtime() {
     process=$1
     pid=$2
-    runtime=$(podman exec "$name" sh -c \
-        'tr "\000" "\n" < "/proc/$1/environ" | sed -n "s/^XDG_RUNTIME_DIR=//p"' sh "$pid")
-    [ "$runtime" = /run/pelagian-shell ] || {
-        echo "pelagian-shell bind-mount smoke: $process PID $pid has XDG_RUNTIME_DIR=$runtime" >&2
+    podman exec "$name" python3 -c '
+from pathlib import Path
+import sys
+entries = Path(f"/proc/{sys.argv[1]}/environ").read_bytes().split(b"\0")
+actual = [entry for entry in entries if entry.startswith(b"XDG_RUNTIME_DIR=")]
+expected = [b"XDG_RUNTIME_DIR=/run/pelagian-shell"]
+if actual != expected:
+    print(f"XDG_RUNTIME_DIR entries: {actual!r}; expected {expected!r}", file=sys.stderr)
+    raise SystemExit(1)
+' "$pid" || {
+        echo "pelagian-shell bind-mount smoke: $process PID $pid has an invalid XDG_RUNTIME_DIR" >&2
         return 1
     }
 }

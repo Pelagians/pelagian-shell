@@ -265,6 +265,8 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("init-selkies-config", runtime_service)
         self.assertIn('"$environment_dir/XDG_RUNTIME_DIR"', runtime_service)
         self.assertIn('"$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"', runtime_service)
+        self.assertIn("printf '%s' \"$runtime_dir\"", runtime_service)
+        self.assertIn("printf '%s' server", runtime_service)
         self.assertIn("chmod 0700", runtime_service)
         self.assertIn("rm -rf -- /config/.XDG", runtime_service)
         self.assertIn("export XDG_RUNTIME_DIR=/run/pelagian-shell", startwm)
