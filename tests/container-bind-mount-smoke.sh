@@ -78,10 +78,11 @@ cleanup() {
                         ;;
                 esac
             done
-            if command -v timeout >/dev/null 2>&1 && test -x /lsiopy/bin/python3; then
-                echo "--- direct PixelFlux startup probe"
-                timeout 12s s6-setuidgid abc env XDG_RUNTIME_DIR=/run/pelagian-shell RUST_BACKTRACE=full \
-                    /lsiopy/bin/python3 -c "from pixelflux import ensure_wayland_display; print(ensure_wayland_display(width=1920, height=1080, auto_gpu=\"true\"), flush=True)" 2>&1 || true
+            if command -v timeout >/dev/null 2>&1 && command -v selkies >/dev/null 2>&1; then
+                echo "--- direct Selkies startup probe"
+                timeout 12s s6-setuidgid abc with-contenv env \
+                    RUST_BACKTRACE=full WAYLAND_DISPLAY=wayland-1 \
+                    selkies --addr=localhost --mode=websockets 2>&1 || true
             fi
             for proc in /proc/[0-9]*/comm; do
                 test -r "$proc" || continue
