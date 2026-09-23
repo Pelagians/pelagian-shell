@@ -49,7 +49,27 @@ cleanup() {
             echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
             ls -la /run/pelagian-shell 2>&1 || true
             echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
+            for service in svc-de svc-pulseaudio svc-selkies; do
+                echo "$service supervisor status"
+                s6-svstat "/run/service/$service" 2>&1 || true
+            done
+            ls -l /defaults/pid /defaults/native 2>&1 || true
+            ls -la /run/pelagian-shell/pulse /config/.XDG /run/user 2>&1 || true
             echo "--- processes"
+            for proc in /proc/[0-9]*/comm; do
+                test -r "$proc" || continue
+                pid=${proc#/proc/}; pid=${pid%/comm}
+                IFS= read -r process < "$proc" || true
+                case "$process" in
+                    selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
+                        echo "$process PID $pid"
+                        tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true
+                        echo
+                        tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
+                            grep -E "^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND|PULSE_SERVER|DBUS_SESSION_BUS_ADDRESS)=" || true
+                        ;;
+                esac
+            done
             for proc in /proc/[0-9]*/comm; do
                 test -r "$proc" || continue
                 pid=${proc#/proc/}; pid=${pid%/comm}
