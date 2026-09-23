@@ -27,13 +27,14 @@ cleanup() {
             find /etc/s6-overlay/s6-rc.d/init-pelagian-runtime \
                 /etc/s6-overlay/s6-rc.d/user/contents.d \
                 /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d \
+                /etc/s6-overlay/s6-rc.d/svc-pulseaudio/dependencies.d \
                 /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d \
                 -maxdepth 2 -type f \( -name '*pelagian*' -o -path '*/init-pelagian-runtime/*' \) \
                 -print 2>&1 || true
             echo "--- compiled Shell s6 graph"
             if command -v s6-rc-db >/dev/null 2>&1; then
-                s6-rc-db list all | grep -E "^(init-pelagian-runtime|init-selkies-config|svc-de|svc-selkies|user)$" || true
-                for service in init-pelagian-runtime svc-de svc-selkies; do
+                s6-rc-db list all | grep -E "^(init-pelagian-runtime|init-selkies-config|svc-de|svc-pulseaudio|svc-selkies|user)$" || true
+                for service in init-pelagian-runtime svc-de svc-pulseaudio svc-selkies; do
                     echo "$service dependencies"; s6-rc-db dependencies "$service" 2>&1 || true
                 done
                 echo "user bundle"; s6-rc-db contents user 2>&1 || true
@@ -151,8 +152,10 @@ test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyrin
 '
     podman exec "$name" pelagian-shellctl status | grep -Fq '"window_chrome_policy":"server"'
     assert_process_runtime Labwc "$(podman exec "$name" pgrep -xo labwc)"
+    assert_process_runtime PulseAudio "$(podman exec "$name" pgrep -xo pulseaudio)"
     assert_process_runtime Selkies "$(podman exec "$name" pgrep -o -f '[s]elkies --addr=localhost')"
     assert_process_runtime layoutd "$(podman exec "$name" pgrep -xo pelagian-layoutd)"
+    assert_process_runtime session-D-Bus "$(podman exec "$name" pgrep -f '[d]bus-daemon --session --address=unix:path=/run/pelagian-shell/bus')"
     podman exec "$name" sh -c \
         'printf "%s\n" persisted-after-recreate > /config/bind-mount-persistence.sentinel'
     assert_no_wayland_permission_error

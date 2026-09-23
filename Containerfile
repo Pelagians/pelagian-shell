@@ -85,6 +85,7 @@ RUN set -eux; \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/init-selkies-config \
         /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d/init-pelagian-runtime \
+        /etc/s6-overlay/s6-rc.d/svc-pulseaudio/dependencies.d/init-pelagian-runtime \
         /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d/init-pelagian-runtime \
         /etc/s6-overlay/s6-rc.d/user/contents.d/init-pelagian-runtime; \
     sh -n /defaults/autostart; \

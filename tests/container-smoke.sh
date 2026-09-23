@@ -73,6 +73,17 @@ print(data.decode(), end="")
 '
 }
 
+assert_process_runtime() {
+    process=$1
+    pid=$2
+    runtime=$("$engine" exec "$name" sh -c \
+        'tr "\000" "\n" < "/proc/$1/environ" | sed -n "s/^XDG_RUNTIME_DIR=//p"' sh "$pid")
+    [ "$runtime" = /run/pelagian-shell ] || {
+        echo "pelagian-shell smoke: $process PID $pid has XDG_RUNTIME_DIR=$runtime" >&2
+        return 1
+    }
+}
+
 dump_failure() {
     echo "pelagian-shell smoke: failure diagnostics" >&2
     "$engine" logs "$name" >&2 2>/dev/null || true
@@ -87,13 +98,14 @@ dump_failure() {
         find /etc/s6-overlay/s6-rc.d/init-pelagian-runtime \
             /etc/s6-overlay/s6-rc.d/user/contents.d \
             /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d \
+            /etc/s6-overlay/s6-rc.d/svc-pulseaudio/dependencies.d \
             /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d \
             -maxdepth 2 -type f \( -name '*pelagian*' -o -path '*/init-pelagian-runtime/*' \) \
             -print 2>&1 || true
         echo "--- compiled Shell s6 graph"
         if command -v s6-rc-db >/dev/null 2>&1; then
-            s6-rc-db list all | grep -E "^(init-pelagian-runtime|init-selkies-config|svc-de|svc-selkies|user)$" || true
-            for service in init-pelagian-runtime svc-de svc-selkies; do
+            s6-rc-db list all | grep -E "^(init-pelagian-runtime|init-selkies-config|svc-de|svc-pulseaudio|svc-selkies|user)$" || true
+            for service in init-pelagian-runtime svc-de svc-pulseaudio svc-selkies; do
                 echo "$service dependencies"; s6-rc-db dependencies "$service" 2>&1 || true
             done
             echo "user bundle"; s6-rc-db contents user 2>&1 || true
@@ -119,6 +131,8 @@ dump_failure() {
                     grep -E "^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND)=" || true
             done
         done
+        echo "--- session process command lines"
+        pgrep -af 'selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon' || true
         echo "--- processes"
         for proc in /proc/[0-9]*/comm; do
             test -r "$proc" || continue
@@ -570,6 +584,11 @@ fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
 "$engine" exec "$name" test -S /run/pelagian-shell/labwc.sock
 "$engine" exec "$name" test -S "/run/pelagian-shell/$fixture_display"
 "$engine" exec "$name" test -S /run/pelagian-shell/bus
+assert_process_runtime Labwc "$("$engine" exec "$name" pgrep -xo labwc)"
+assert_process_runtime PulseAudio "$("$engine" exec "$name" pgrep -xo pulseaudio)"
+assert_process_runtime Selkies "$("$engine" exec "$name" pgrep -o -f '[s]elkies --addr=localhost')"
+assert_process_runtime layoutd "$("$engine" exec "$name" pgrep -xo pelagian-layoutd)"
+assert_process_runtime session-D-Bus "$("$engine" exec "$name" pgrep -f '[d]bus-daemon --session --address=unix:path=/run/pelagian-shell/bus')"
 "$engine" exec "$name" sh -c '
 test "$(stat -c %u:%g:%a /run/pelagian-shell)" = "$(id -u abc):$(id -g abc):700"
 test "$(env | sed -n "s/^XDG_RUNTIME_DIR=//p")" = /run/pelagian-shell
