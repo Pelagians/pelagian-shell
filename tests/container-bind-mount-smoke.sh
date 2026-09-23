@@ -119,6 +119,12 @@ assert_no_wayland_permission_error() {
 assert_process_runtime() {
     process=$1
     pid=$2
+    case "$pid" in
+        ''|*[!0-9]*)
+            echo "pelagian-shell bind-mount smoke: could not resolve $process PID: $pid" >&2
+            return 1
+            ;;
+    esac
     podman exec --user abc "$name" python3 -c '
 from pathlib import Path
 import sys
@@ -211,7 +217,7 @@ test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyrin
     assert_process_runtime Labwc "$(podman exec "$name" pgrep -xo labwc)"
     assert_process_runtime PulseAudio "$(podman exec "$name" pgrep -xo pulseaudio)"
     assert_process_runtime Selkies "$(podman exec "$name" pgrep -o -f '[s]elkies --addr=localhost')"
-    assert_process_runtime layoutd "$(podman exec "$name" pgrep -xo pelagian-layoutd)"
+    assert_process_runtime layoutd "$(podman exec "$name" cat /config/.local/state/pelagian-shell/layoutd.pid)"
     assert_process_runtime session-D-Bus "$(podman exec "$name" pgrep -f '[d]bus-daemon --session --address=unix:path=/run/pelagian-shell/bus')"
     podman exec "$name" sh -c \
         'printf "%s\n" persisted-after-recreate > /config/bind-mount-persistence.sentinel'

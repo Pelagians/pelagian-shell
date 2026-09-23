@@ -78,6 +78,12 @@ print(data.decode(), end="")
 assert_process_runtime() {
     process=$1
     pid=$2
+    case "$pid" in
+        ''|*[!0-9]*)
+            echo "pelagian-shell smoke: could not resolve $process PID: $pid" >&2
+            return 1
+            ;;
+    esac
     "$engine" exec --user abc "$name" python3 -c '
 from pathlib import Path
 import sys
@@ -663,7 +669,7 @@ fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
 assert_process_runtime Labwc "$("$engine" exec "$name" pgrep -xo labwc)"
 assert_process_runtime PulseAudio "$("$engine" exec "$name" pgrep -xo pulseaudio)"
 assert_process_runtime Selkies "$("$engine" exec "$name" pgrep -o -f '[s]elkies --addr=localhost')"
-assert_process_runtime layoutd "$("$engine" exec "$name" pgrep -xo pelagian-layoutd)"
+assert_process_runtime layoutd "$("$engine" exec "$name" cat /config/.local/state/pelagian-shell/layoutd.pid)"
 assert_process_runtime session-D-Bus "$("$engine" exec "$name" pgrep -f '[d]bus-daemon --session --address=unix:path=/run/pelagian-shell/bus')"
 "$engine" exec "$name" sh -c '
 test "$(stat -c %u:%g:%a /run/pelagian-shell)" = "$(id -u abc):$(id -g abc):700"
