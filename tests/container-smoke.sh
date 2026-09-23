@@ -53,6 +53,8 @@ name="pelagian-shell-smoke-$$"
 config_volume="$name-config"
 port=${PELAGIAN_SHELL_SMOKE_PORT:-13001}
 sentinel=/tmp/pelagian-shell-session-smoke
+producer_snapshot=
+producer_probe=
 
 labwc_state() {
     "$engine" exec --user abc \
@@ -86,6 +88,10 @@ assert_process_runtime() {
 
 dump_failure() {
     echo "pelagian-shell smoke: failure diagnostics" >&2
+    echo "--- last producer process snapshot" >&2
+    printf '%s\n' "$producer_snapshot" >&2
+    echo "--- direct PixelFlux startup probe" >&2
+    printf '%s\n' "$producer_probe" >&2
     "$engine" logs "$name" >&2 2>/dev/null || true
     labwc_state >&2 2>/dev/null || true
     "$engine" exec "$name" pelagian-layoutd status >&2 2>/dev/null || true
@@ -119,13 +125,6 @@ dump_failure() {
         if test -r /run/s6/container_environment/CUSTOM_WS_PORT; then echo; fi
         echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
         ls -la /run/pelagian-shell 2>&1 || true
-        echo "--- runtime ownership and abc write probe"; stat -c '%u:%g:%a %n' /run/pelagian-shell /config/.XDG 2>&1 || true
-        s6-setuidgid abc touch /run/pelagian-shell/.smoke-write 2>&1 || true
-        s6-setuidgid abc rm -f /run/pelagian-shell/.smoke-write 2>&1 || true
-        echo "--- supervised Selkies launch environment"
-        sed -n '1,220p' /run/service/svc-selkies/run 2>&1 || true
-        with-contenv env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
-        s6-envdir -fn /run/s6/container_environment env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
         echo "--- Wayland sockets"
         find /run/pelagian-shell /config/.XDG -maxdepth 1 -type s -print 2>&1 || true
         echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
@@ -143,7 +142,6 @@ dump_failure() {
             case "$process" in
                 selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
                     echo "$process PID $pid"
-                    grep -E "^(Uid|Gid|Groups):" "/proc/$pid/status" 2>/dev/null || true
                     tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true
                     echo
                     tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
@@ -151,11 +149,6 @@ dump_failure() {
                     ;;
             esac
         done
-        if command -v timeout >/dev/null 2>&1 && test -x /lsiopy/bin/python3; then
-            echo "--- direct PixelFlux startup probe"
-            timeout 12s s6-setuidgid abc env XDG_RUNTIME_DIR=/run/pelagian-shell RUST_BACKTRACE=full \
-                /lsiopy/bin/python3 -c "from pixelflux import ensure_wayland_display; print(ensure_wayland_display(width=1920, height=1080, auto_gpu=\"true\"), flush=True)" 2>&1 || true
-        fi
         echo "--- remaining process states"
         for proc in /proc/[0-9]*/comm; do
             test -r "$proc" || continue
@@ -593,11 +586,32 @@ while [ "$attempt" -lt 60 ]; do
         ready=1
         break
     fi
+    if [ $((attempt % 5)) -eq 0 ]; then
+        producer_snapshot=$("$engine" exec "$name" sh -c '
+            for proc in /proc/[0-9]*/comm; do
+                test -r "$proc" || continue
+                pid=${proc#/proc/}; pid=${pid%/comm}
+                IFS= read -r process < "$proc" || true
+                case "$process" in
+                    selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon)
+                        echo "$process PID $pid"
+                        grep -E "^(Uid|Gid|Groups):" "/proc/$pid/status" 2>/dev/null || true
+                        tr "\\000" "\\n" < "/proc/$pid/environ" 2>/dev/null |
+                            grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND|DBUS_SESSION_BUS_ADDRESS)=" || true
+                        ;;
+                esac
+            done
+        ' 2>&1 || true)
+    fi
     attempt=$((attempt + 1))
     sleep 1
 done
 if [ -z "$ready" ]; then
     echo "pelagian-shell smoke: Labwc, session autostart, or Selkies HTTPS did not become ready" >&2
+    producer_probe=$("$engine" exec --user abc --env XDG_RUNTIME_DIR=/run/pelagian-shell "$name" \
+        timeout 12s env RUST_BACKTRACE=full /lsiopy/bin/python3 -c \
+        'from pixelflux import ensure_wayland_display; print(ensure_wayland_display(width=1920, height=1080, auto_gpu="true"), flush=True)' \
+        2>&1 || true)
     exit 1
 fi
 
