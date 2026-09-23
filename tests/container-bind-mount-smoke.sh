@@ -96,6 +96,7 @@ start_container() {
     podman run -d --name "$name" --shm-size=1g --publish "127.0.0.1::3001" \
         --env "PUID=$(id -u)" --env "PGID=$(id -g)" \
         --env PIXELFLUX_WAYLAND=true \
+        --env RUST_BACKTRACE=1 \
         --env SELKIES_MANUAL_WIDTH=1920 --env SELKIES_MANUAL_HEIGHT=1080 \
         --env PELAGIAN_SHELL_LABWC_VERBOSE=true \
         --volume "$host_config:/config:Z" \

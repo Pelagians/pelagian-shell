@@ -515,6 +515,7 @@ mount_mode=ro
     --env "PUID=$(id -u)" \
     --env "PGID=$(id -g)" \
     --env PIXELFLUX_WAYLAND=true \
+    --env RUST_BACKTRACE=1 \
     --env SELKIES_MANUAL_WIDTH="$width" \
     --env SELKIES_MANUAL_HEIGHT="$height" \
     --env PELAGIAN_SHELL_LABWC_VERBOSE=true \
