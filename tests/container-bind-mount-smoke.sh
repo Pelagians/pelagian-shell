@@ -73,8 +73,6 @@ cleanup() {
                         grep -E "^(Uid|Gid|Groups):" "/proc/$pid/status" 2>/dev/null || true
                         tr "\000" " " < "/proc/$pid/cmdline" 2>/dev/null || true
                         echo
-                        tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
-                            grep -E "^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND|PULSE_SERVER|DBUS_SESSION_BUS_ADDRESS)=" || true
                         ;;
                 esac
             done
@@ -101,9 +99,22 @@ cleanup() {
                 grep -E "^(Name|State|Uid|Gid|Groups):" "/proc/$pid/status" 2>&1 || true
                 printf "cmdline="; tr "\000" " " < "/proc/$pid/cmdline" 2>&1 || true; echo
                 printf "wchan="; cat "/proc/$pid/wchan" 2>&1 || true; echo
-                tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|GDK_BACKEND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
             done
         ' >&2 || true
+        for pid_file in /config/.local/state/pelagian-shell/consumer.pid /tmp/pelagian-layout-first.pid; do
+            pid=$(podman exec "$name" cat "$pid_file" 2>/dev/null || true)
+            case "$pid" in ''|*[!0-9]*) continue ;; esac
+            podman exec --user abc "$name" python3 -c '
+from pathlib import Path
+import sys
+pid = sys.argv[1]
+entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+keys = (b"XDG_RUNTIME_DIR=", b"WAYLAND_DISPLAY=", b"GDK_BACKEND=", b"DBUS_SESSION_BUS_ADDRESS=", b"DISPLAY=")
+for entry in entries:
+    if entry.startswith(keys):
+        print("PID " + pid + " env " + entry.decode(errors="replace"))
+' "$pid" >&2 2>&1 || true
+        done
     fi
     podman rm -f "$name" >/dev/null 2>&1 || true
     # LinuxServer initialization may chown the bind mount to the mapped abc
@@ -231,6 +242,8 @@ test ! -e /config/.XDG
 test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
 '
     podman exec "$name" pelagian-shellctl status | grep -Fq '"window_chrome_policy":"server"'
+    assert_process_runtime consumer \
+        "$(podman exec "$name" cat /config/.local/state/pelagian-shell/consumer.pid)"
     assert_process_runtime Labwc "$(podman exec "$name" pgrep -xo labwc)"
     assert_process_runtime PulseAudio "$(podman exec "$name" pgrep -xo pulseaudio)"
     assert_process_runtime Selkies "$(podman exec "$name" pgrep -o -f '[s]elkies --addr=localhost')"
@@ -248,8 +261,6 @@ qualify_stream_and_window() {
         "$name:/tmp/verify-shell-session.py"
     podman exec --user abc "$name" python3 /tmp/verify-shell-session.py \
         'Pelagian Fixture One' --native
-    assert_process_runtime consumer \
-        "$(podman exec "$name" cat /config/.local/state/pelagian-shell/consumer.pid)"
     podman exec "$name" test "$(cat /config/bind-mount-persistence.sentinel)" = persisted-after-recreate
     podman exec "$name" test -S /run/pelagian-shell/wayland-1
     assert_no_wayland_permission_error
