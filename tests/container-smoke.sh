@@ -683,7 +683,8 @@ test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyrin
 wait_layout 1 "$width" "$height" One 0
 wait_counts 1 0
 
-"$engine" exec "$name" pelagian-shellctl status >/dev/null
+shell_status=$("$engine" exec "$name" pelagian-shellctl status)
+printf '%s\n' "$shell_status" | grep -q '"window_chrome_policy":"server"'
 "$engine" exec "$name" pelagian-shellctl config show >/dev/null
 status=$("$engine" exec "$name" pelagian-layoutd status)
 if printf '%s\n' "$status" | grep -q planner_only; then
@@ -694,7 +695,6 @@ printf '%s\n' "$status" | grep -q '"layoutd":"healthy"'
 printf '%s\n' "$status" | grep -q '"compositor_adapter":"labwc-ipc"'
 printf '%s\n' "$status" | grep -q '"adapter_connected":true'
 printf '%s\n' "$status" | grep -q '"reconciliation":"healthy"'
-printf '%s\n' "$status" | grep -q '"window_chrome_policy":"server"'
 "$engine" exec "$name" sh -c '
 test "$(cat /config/pelagian-shell-smoke.sentinel)" = preserve-me
 cmp -s /defaults/labwc.xml /config/.config/labwc/rc.xml
