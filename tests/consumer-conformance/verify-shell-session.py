@@ -84,16 +84,32 @@ def verify_app_bus(env):
     assert address == expected, address
 
 
-def opaque_binary_session_env(process_env, session_env, xwayland_cmdlines):
+def select_compositor_display(runtime, pattern, session_env):
+    matches = []
+    for path in sorted(Path(runtime).glob("wayland-[0-9]*")):
+        if not path.is_socket():
+            continue
+        env = {**session_env, "XDG_RUNTIME_DIR": runtime, "WAYLAND_DISPLAY": path.name}
+        try:
+            toplevels = command("wlrctl", "toplevel", "list", env=env)
+        except (OSError, subprocess.SubprocessError):
+            continue
+        if re.search(pattern, toplevels, re.I):
+            matches.append((path.name, toplevels))
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def opaque_binary_session_env(process_env, session_env, xwayland_cmdlines, wayland_display):
     """Use Shell's live sockets when a packaged binary hides its own environment."""
     runtime = session_env.get("XDG_RUNTIME_DIR", "")
     assert runtime.startswith("/run/"), runtime
-    assert Path(runtime, "wayland-1").is_socket(), runtime
+    assert Path(runtime, wayland_display).is_socket(), runtime
     assert Path(runtime, "bus").is_socket(), runtime
     displays = [arg.decode() for args in xwayland_cmdlines for arg in args.split(b"\0")
                 if re.fullmatch(rb":[0-9]+", arg)]
     assert len(displays) == 1, displays
-    expected = {"XDG_RUNTIME_DIR": runtime, "WAYLAND_DISPLAY": "wayland-1",
+    expected = {"XDG_RUNTIME_DIR": runtime, "WAYLAND_DISPLAY": wayland_display,
                 "DISPLAY": displays[0], "DBUS_SESSION_BUS_ADDRESS": f"unix:path={runtime}/bus"}
     for key, value in process_env.items():
         if key in expected:
@@ -138,16 +154,20 @@ def main():
             if sep and key.decode() in selected:
                 process_env[key.decode()] = value.decode()
         if args.opaque_binary_env:
+            runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+            assert runtime.startswith("/run/"), runtime
+            compositor_display, wayland = select_compositor_display(runtime, args.pattern, os.environ)
             pids = command("pgrep", "-x", "Xwayland").splitlines()
             cmdlines = [Path(f"/proc/{pid}/cmdline").read_bytes() for pid in pids]
-            env = opaque_binary_session_env(process_env, os.environ, cmdlines)
+            env = opaque_binary_session_env(process_env, os.environ, cmdlines, compositor_display)
         else:
             env = {**os.environ, **process_env}
             assert process_env.get("XDG_RUNTIME_DIR", "").startswith("/run/"), process_env.get("XDG_RUNTIME_DIR")
             verify_app_bus(process_env)
         if args.native:
             assert env.get("WAYLAND_DISPLAY") and env.get("DISPLAY"), "missing application display coordinates"
-            wayland = command("wlrctl", "toplevel", "list", env=env)
+            if not args.opaque_binary_env:
+                wayland = command("wlrctl", "toplevel", "list", env=env)
             x11 = command("xlsclients", "-display", env["DISPLAY"], "-l", env=env)
             assert re.search(args.pattern, wayland, re.I), wayland
             assert not re.search(args.pattern, x11, re.I), x11
