@@ -2,7 +2,10 @@
 """Regression tests for the real-window smoke gate."""
 import importlib.util
 from pathlib import Path
+import subprocess
+import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("shell_check", Path(__file__).with_name("verify-shell-session.py"))
 module = importlib.util.module_from_spec(spec)
@@ -58,6 +61,45 @@ class GeometryGateTests(unittest.TestCase):
         state = self.state | dict(views=[self.view, dialog])
         health = self.health | dict(floating_windows=1)
         module.verify(state, health, "test-app", floating_count=1)
+
+
+class OpaqueBinarySessionTests(unittest.TestCase):
+    def test_discovers_labwc_socket_without_assuming_wayland_number(self):
+        runtime = "/run/pelagian-shell"
+        paths = [Path(runtime, "wayland-0"), Path(runtime, "wayland-1")]
+
+        def list_toplevels(*args, env):
+            if env["WAYLAND_DISPLAY"] == "wayland-1":
+                raise subprocess.CalledProcessError(1, args)
+            return "chatgpt-desktop: ChatGPT"
+
+        with patch.object(Path, "glob", return_value=paths), \
+             patch.object(Path, "is_socket", return_value=True), \
+             patch.object(module, "command", side_effect=list_toplevels):
+            display, inventory = module.select_compositor_display(runtime, "chatgpt", {})
+            self.assertEqual(display, "wayland-0")
+            self.assertIn("ChatGPT", inventory)
+
+    def test_opaque_client_uses_live_shell_sockets_and_rejects_conflicts(self):
+        with tempfile.TemporaryDirectory(prefix="pelagian-bus-") as directory:
+            env = {"XDG_RUNTIME_DIR": directory}
+            with self.assertRaises(AssertionError):
+                module.verify_app_bus(env)
+            session = {"XDG_RUNTIME_DIR": "/run/pelagian-shell"}
+            cmdlines = [b"/usr/bin/Xwayland\0:1\0-rootless\0"]
+            with self.assertRaises(AssertionError):
+                module.opaque_binary_session_env({}, session, cmdlines, "wayland-0")
+            with patch.object(Path, "is_socket", return_value=True):
+                derived = module.opaque_binary_session_env({}, session, cmdlines, "wayland-0")
+                self.assertEqual(derived["WAYLAND_DISPLAY"], "wayland-0")
+                self.assertEqual(derived["DISPLAY"], ":1")
+                self.assertEqual(derived["DBUS_SESSION_BUS_ADDRESS"],
+                                 "unix:path=/run/pelagian-shell/bus")
+                with self.assertRaises(AssertionError):
+                    module.opaque_binary_session_env({"WAYLAND_DISPLAY": "wayland-0"},
+                                                     session, cmdlines, "wayland-1")
+                with self.assertRaises(AssertionError):
+                    module.opaque_binary_session_env({}, session, cmdlines * 2, "wayland-0")
 
 
 if __name__ == "__main__":
