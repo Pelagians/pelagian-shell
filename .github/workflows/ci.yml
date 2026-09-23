@@ -94,7 +94,7 @@ jobs:
     timeout-minutes: 90
     env:
       # Grotto's consumer hook and real-window/keyring/restart smoke contract.
-      GROTTO_COMMIT: cb247081c1a2eb70fa4a3af0c6cfe5c461117e81
+      GROTTO_COMMIT: 5ad4e1ea7532c1da80dfb600a1e822064d49cf20
       SHELL_IMAGE: localhost/pelagian-shell:candidate
       HERMES_IMAGE: localhost/pelagian-shell-hermes:qualification
       PELAGIAN_SHELL_CONFORMANCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
