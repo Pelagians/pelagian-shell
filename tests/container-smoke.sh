@@ -83,14 +83,39 @@ dump_failure() {
         >&2 2>/dev/null || true
     "$engine" exec "$name" sh -c '
         echo "--- s6 active services"; s6-rc -a list 2>&1 || true
-        echo "--- session env files"; for key in XDG_RUNTIME_DIR WAYLAND_DISPLAY PIXELFLUX_WAYLAND; do
+        echo "--- Shell s6 definitions"
+        find /etc/s6-overlay/s6-rc.d/init-pelagian-runtime \
+            /etc/s6-overlay/s6-rc.d/user/contents.d \
+            /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d \
+            /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d \
+            -maxdepth 2 -type f \( -name '*pelagian*' -o -path '*/init-pelagian-runtime/*' \) \
+            -print 2>&1 || true
+        echo "--- compiled Shell s6 graph"
+        if command -v s6-rc-db >/dev/null 2>&1; then
+            s6-rc-db list all | grep -E "^(init-pelagian-runtime|init-selkies-config|svc-de|svc-selkies|user)$" || true
+            for service in init-pelagian-runtime svc-de svc-selkies; do
+                echo "$service dependencies"; s6-rc-db dependencies "$service" 2>&1 || true
+            done
+            echo "user bundle"; s6-rc-db contents user 2>&1 || true
+        fi
+        echo "--- s6 runtime directories"; find /run/s6-rc -maxdepth 3 -type d -print 2>&1 || true
+        echo "--- session env files"; for key in XDG_RUNTIME_DIR WAYLAND_DISPLAY PIXELFLUX_WAYLAND CUSTOM_WS_PORT LD_PRELOAD; do
             if test -r "/run/s6/container_environment/$key"; then
                 printf "%s=" "$key"; cat "/run/s6/container_environment/$key"
             fi
         done
+        if test -r /run/s6/container_environment/CUSTOM_WS_PORT; then echo; fi
         echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
         ls -la /run/pelagian-shell 2>&1 || true
-        echo "--- processes"; ps -eo pid,comm
+        echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
+        echo "--- processes"
+        for proc in /proc/[0-9]*/comm; do
+            test -r "$proc" || continue
+            pid=${proc#/proc/}; pid=${pid%/comm}
+            IFS= read -r command < "$proc" || true
+            printf "%s %s " "$pid" "$command"
+            cat "/proc/$pid/wchan" 2>/dev/null || true
+        done
     ' >&2 2>/dev/null || true
 }
 
