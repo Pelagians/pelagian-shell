@@ -82,6 +82,7 @@ RUN set -eux; \
     chmod 0644 \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/type \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init \
+        /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/init-selkies-config \
         /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d/init-pelagian-runtime \
         /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d/init-pelagian-runtime \
         /etc/s6-overlay/s6-rc.d/user/contents.d/init-pelagian-runtime; \
@@ -93,6 +94,7 @@ RUN set -eux; \
     test -x /usr/local/bin/pelagian-layoutd; \
     command -v dbus-daemon; \
     test -r /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py; \
+    test -f /etc/s6-overlay/s6-rc.d/init-selkies-config/type; \
     test -f /etc/s6-overlay/s6-rc.d/svc-de/type; \
     test -f /etc/s6-overlay/s6-rc.d/svc-selkies/type; \
     test -r /usr/share/pelagian-shell/integrations/electron/window-chrome.mjs; \

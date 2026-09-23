@@ -109,7 +109,7 @@ for socket in "$@"; do
     if test -S "$socket"; then found=true; fi
 done
 test "$found" = true
-test "$(cat /config/.XDG/legacy-sentinel)" = old-runtime-state
+test ! -e /config/.XDG/legacy-sentinel
 test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
 '
     podman exec "$name" pelagian-shellctl status | grep -Fq '"window_chrome_policy":"server"'

@@ -526,7 +526,7 @@ fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
 test "$(stat -c %u:%g:%a /run/pelagian-shell)" = "$(id -u abc):$(id -g abc):700"
 test "$(env | sed -n "s/^XDG_RUNTIME_DIR=//p")" = /run/pelagian-shell
 test "$(env | sed -n "s/^PELAGIAN_SHELL_WINDOW_CHROME=//p")" = server
-test "$(cat /config/.XDG/old-runtime-sentinel)" = obsolete-runtime-state
+test ! -e /config/.XDG/old-runtime-sentinel
 test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
 '
 

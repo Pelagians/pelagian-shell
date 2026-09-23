@@ -21,7 +21,7 @@ The runtime applies:
 - static Labwc configuration, GTK 3/4 dark defaults, and the Shell theme; and
 - the optional `/usr/local/bin/pelagian-shell-consumer`, with logs, PID, and exit status under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
 
-The Shell session uses `/run/pelagian-shell` for `XDG_RUNTIME_DIR`, Labwc IPC, Wayland sockets, and the session D-Bus socket. It recreates this directory at container start with owner `abc` and mode `0700`. LinuxServer's previous `/config/.XDG` path is obsolete; Shell leaves existing files there untouched. Applications continue to store persistent state under `/config`.
+The Shell session uses `/run/pelagian-shell` for `XDG_RUNTIME_DIR`, Labwc IPC, Wayland sockets, and the session D-Bus socket. It recreates this directory at container start with owner `abc` and mode `0700`. LinuxServer clears its obsolete `/config/.XDG` runtime directory during initialization. Other persistent files under `/config`, including keyrings, remain application data.
 
 Shell exports `PELAGIAN_SHELL_WINDOW_CHROME=server` to the Wayland session and consumers. This v0 policy means ordinary top-level application windows yield chrome to Labwc, which owns their visible titlebar and close-only controls.
 

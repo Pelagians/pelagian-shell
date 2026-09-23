@@ -4,9 +4,9 @@ set -Eeuo pipefail
 runtime_dir=/run/pelagian-shell
 environment_dir=/run/s6/container_environment
 
-# Run after LinuxServer's user remapping, before either the Wayland producer
-# or desktop service starts. /run is container-local; never store session IPC
-# in the persistent /config volume.
+# Run after LinuxServer's init-selkies-config, which resets XDG_RUNTIME_DIR to
+# /config/.XDG, and before either the Wayland producer or desktop service
+# starts. /run is container-local; never store session IPC in /config.
 install -d -o abc -g abc -m 0700 "$runtime_dir"
 find "$runtime_dir" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
 chown abc:abc "$runtime_dir"

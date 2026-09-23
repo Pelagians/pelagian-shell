@@ -244,6 +244,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
             encoding="utf-8"
         )
         runtime_dependencies = ROOT / "session/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init"
+        selkies_config_dependency = ROOT / "session/s6-rc.d/init-pelagian-runtime/dependencies.d/init-selkies-config"
         startwm = (ROOT / "session/startwm_wayland.sh").read_text(encoding="utf-8")
         autostart = (ROOT / "session/autostart_wayland").read_text(encoding="utf-8")
         bind_smoke = (ROOT / "tests/container-bind-mount-smoke.sh").read_text(
@@ -253,7 +254,9 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         self.assertIn("PELAGIAN_SHELL_WINDOW_CHROME=server", containerfile)
         self.assertIn("check-electron-chrome.py /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py", containerfile)
         self.assertTrue(runtime_dependencies.is_file())
+        self.assertTrue(selkies_config_dependency.is_file())
         self.assertIn("/run/s6/container_environment", runtime_service)
+        self.assertIn("init-selkies-config", runtime_service)
         self.assertIn('"$environment_dir/XDG_RUNTIME_DIR"', runtime_service)
         self.assertIn('"$environment_dir/PELAGIAN_SHELL_WINDOW_CHROME"', runtime_service)
         self.assertIn("chmod 0700", runtime_service)
