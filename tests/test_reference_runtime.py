@@ -240,9 +240,12 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
 
     def test_session_ipc_and_window_chrome_are_shell_owned(self) -> None:
         containerfile = (ROOT / "Containerfile").read_text(encoding="utf-8")
-        runtime_service = (ROOT / "session/s6-rc.d/init-pelagian-runtime/up").read_text(
+        runtime_service = (ROOT / "session/s6-rc.d/init-pelagian-runtime/run").read_text(
             encoding="utf-8"
         )
+        runtime_up = (ROOT / "session/s6-rc.d/init-pelagian-runtime/up").read_text(
+            encoding="utf-8"
+        ).strip()
         runtime_dependencies = ROOT / "session/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init"
         selkies_config_dependency = ROOT / "session/s6-rc.d/init-pelagian-runtime/dependencies.d/init-selkies-config"
         startwm = (ROOT / "session/startwm_wayland.sh").read_text(encoding="utf-8")
@@ -252,6 +255,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
         )
         self.assertIn("XDG_RUNTIME_DIR=/run/pelagian-shell", containerfile)
         self.assertIn("PELAGIAN_SHELL_WINDOW_CHROME=server", containerfile)
+        self.assertEqual("/etc/s6-overlay/s6-rc.d/init-pelagian-runtime/run", runtime_up)
         self.assertIn("check-electron-chrome.py /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py", containerfile)
         self.assertTrue(runtime_dependencies.is_file())
         self.assertTrue(selkies_config_dependency.is_file())
@@ -270,7 +274,7 @@ class ReferenceRuntimeContractTests(unittest.TestCase):
 
     def test_electron_adapter_and_bind_smoke_scripts_parse(self) -> None:
         subprocess.run(
-            ["bash", "-n", str(ROOT / "session/s6-rc.d/init-pelagian-runtime/up")],
+            ["bash", "-n", str(ROOT / "session/s6-rc.d/init-pelagian-runtime/run")],
             check=True,
         )
         subprocess.run(["sh", "-n", str(ROOT / "tests/container-bind-mount-smoke.sh")], check=True)

@@ -78,9 +78,10 @@ RUN set -eux; \
         /defaults/startwm_wayland.sh \
         /custom-cont-init.d/20-pelagian-shell-config \
         /usr/local/bin/pelagian-shell-apply-wine-defaults; \
-    chmod 0755 /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/up; \
+    chmod 0755 /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/run; \
     chmod 0644 \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/type \
+        /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/up \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init \
         /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/init-selkies-config \
         /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d/init-pelagian-runtime \
@@ -90,6 +91,7 @@ RUN set -eux; \
     sh -n /defaults/autostart_wayland; \
     sh -n /defaults/startwm_wayland.sh; \
     sh -n /custom-cont-init.d/20-pelagian-shell-config; \
+    sh -n /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/run; \
     test -x /usr/local/bin/pelagian-shellctl; \
     test -x /usr/local/bin/pelagian-layoutd; \
     command -v dbus-daemon; \
