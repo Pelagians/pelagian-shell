@@ -119,7 +119,7 @@ assert_no_wayland_permission_error() {
 assert_process_runtime() {
     process=$1
     pid=$2
-    podman exec "$name" python3 -c '
+    podman exec --user abc "$name" python3 -c '
 from pathlib import Path
 import sys
 entries = Path(f"/proc/{sys.argv[1]}/environ").read_bytes().split(b"\0")

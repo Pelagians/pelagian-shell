@@ -78,7 +78,7 @@ print(data.decode(), end="")
 assert_process_runtime() {
     process=$1
     pid=$2
-    "$engine" exec "$name" python3 -c '
+    "$engine" exec --user abc "$name" python3 -c '
 from pathlib import Path
 import sys
 entries = Path(f"/proc/{sys.argv[1]}/environ").read_bytes().split(b"\0")
