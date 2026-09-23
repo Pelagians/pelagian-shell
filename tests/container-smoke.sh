@@ -132,7 +132,18 @@ dump_failure() {
             done
         done
         echo "--- session process command lines"
-        pgrep -af 'selkies|labwc|pulseaudio|pelagian-layoutd|dbus-daemon' || true
+        for proc in /proc/[0-9]*/cmdline; do
+            test -r "$proc" || continue
+            pid=${proc#/proc/}; pid=${pid%/cmdline}
+            command=$(tr "\000" " " < "$proc" 2>/dev/null || true)
+            case "$command" in
+                *selkies*|*labwc*|*pulseaudio*|*pelagian-layoutd*|*dbus-daemon*)
+                    echo "$pid $command"
+                    tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null |
+                        grep -E "^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND|PULSE_SERVER)=" || true
+                    ;;
+            esac
+        done
         echo "--- processes"
         for proc in /proc/[0-9]*/comm; do
             test -r "$proc" || continue
