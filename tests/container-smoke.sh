@@ -107,7 +107,18 @@ dump_failure() {
         if test -r /run/s6/container_environment/CUSTOM_WS_PORT; then echo; fi
         echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
         ls -la /run/pelagian-shell 2>&1 || true
+        echo "--- Wayland sockets"
+        find /run/pelagian-shell /config/.XDG -maxdepth 1 -type s -print 2>&1 || true
         echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
+        echo "--- producer process runtime"
+        for process in selkies labwc; do
+            pids=$(pgrep -x "$process" 2>/dev/null || true)
+            for pid in $pids; do
+                echo "$process PID $pid"
+                tr "\000" "\n" < "/proc/$pid/environ" |
+                    grep -E "^(XDG_RUNTIME_DIR|WAYLAND_DISPLAY|PIXELFLUX_WAYLAND)=" || true
+            done
+        done
         echo "--- processes"
         for proc in /proc/[0-9]*/comm; do
             test -r "$proc" || continue
