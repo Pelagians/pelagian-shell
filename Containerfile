@@ -47,6 +47,8 @@ ENV TITLE="Pelagian Shell" \
     PIXELFLUX_WAYLAND=true \
     AUTO_GPU=true \
     RESTART_APP=false \
+    XDG_RUNTIME_DIR=/run/pelagian-shell \
+    PELAGIAN_SHELL_WINDOW_CHROME=server \
     SELKIES_DESKTOP=false \
     PELORUS=false
 
@@ -61,7 +63,10 @@ COPY session/autostart_wayland /defaults/autostart_wayland
 COPY session/supervise-layoutd /usr/local/bin/pelagian-shell-supervise-layoutd
 COPY session/autostart /defaults/autostart
 COPY session/20-pelagian-shell-config /custom-cont-init.d/20-pelagian-shell-config
+COPY session/s6-rc.d/ /etc/s6-overlay/s6-rc.d/
 COPY theme/ /usr/share/pelagian-shell/theme/
+COPY integrations/electron/ /usr/share/pelagian-shell/integrations/electron/
+COPY tests/consumer-conformance/check-electron-chrome.py /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py
 COPY wine/pelagian-shell.reg /usr/share/pelagian-shell/wine/pelagian-shell.reg
 COPY wine/apply-defaults.sh /usr/local/bin/pelagian-shell-apply-wine-defaults
 
@@ -73,12 +78,25 @@ RUN set -eux; \
         /defaults/startwm_wayland.sh \
         /custom-cont-init.d/20-pelagian-shell-config \
         /usr/local/bin/pelagian-shell-apply-wine-defaults; \
+    chmod 0755 /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/up; \
+    chmod 0644 \
+        /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/type \
+        /etc/s6-overlay/s6-rc.d/init-pelagian-runtime/dependencies.d/legacy-cont-init \
+        /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d/init-pelagian-runtime \
+        /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d/init-pelagian-runtime \
+        /etc/s6-overlay/s6-rc.d/user/contents.d/init-pelagian-runtime; \
     sh -n /defaults/autostart; \
     sh -n /defaults/autostart_wayland; \
     sh -n /defaults/startwm_wayland.sh; \
     sh -n /custom-cont-init.d/20-pelagian-shell-config; \
     test -x /usr/local/bin/pelagian-shellctl; \
     test -x /usr/local/bin/pelagian-layoutd; \
+    command -v dbus-daemon; \
+    test -r /usr/share/pelagian-shell/consumer-conformance/check-electron-chrome.py; \
+    test -f /etc/s6-overlay/s6-rc.d/legacy-cont-init/type; \
+    test -f /etc/s6-overlay/s6-rc.d/svc-de/type; \
+    test -f /etc/s6-overlay/s6-rc.d/svc-selkies/type; \
+    test -r /usr/share/pelagian-shell/integrations/electron/window-chrome.mjs; \
     test -x /lsiopy/bin/selkies; \
     command -v labwc; \
     command -v wlr-randr; \

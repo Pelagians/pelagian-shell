@@ -36,7 +36,7 @@ class ConsumerSessionContractTests(unittest.TestCase):
                 "XDG_STATE_HOME": str(root / "state"),
             }
         )
-        subprocess.run(["sh", str(autostart)], check=True, env=environment)
+        subprocess.run(["sh", str(autostart)], check=False, env=environment)
         return root, marker, temporary
 
     @staticmethod
@@ -48,7 +48,7 @@ class ConsumerSessionContractTests(unittest.TestCase):
             time.sleep(0.01)
         raise AssertionError(f"timed out waiting for {path}")
 
-    def test_shell_runs_consumer_hook_without_replacing_shell_autostart(self) -> None:
+    def test_shell_autostart_waits_for_the_consumer_hook(self) -> None:
         root, marker, temporary = self.run_autostart('printf launched > "$TEST_CONSUMER_MARKER"')
         with temporary:
             status = root / "state/pelagian-shell/consumer.status"
@@ -58,7 +58,41 @@ class ConsumerSessionContractTests(unittest.TestCase):
             self.assertEqual("0\n", status.read_text(encoding="utf-8"))
             self.assertTrue((root / "sentinel").is_file())
 
-    def test_consumer_failure_is_recorded_without_failing_shell_autostart(self) -> None:
+    def test_shell_autostart_stays_alive_while_consumer_is_running(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            hook = root / "consumer"
+            marker = root / "started"
+            stop = root / "stop"
+            autostart = root / "autostart"
+            hook.write_text(
+                '#!/bin/sh\nprintf started > "$TEST_STARTED"\n'
+                'while [ ! -e "$TEST_STOP" ]; do sleep 0.02; done\n',
+                encoding="utf-8",
+            )
+            hook.chmod(0o755)
+            source = AUTOSTART.read_text(encoding="utf-8")
+            autostart.write_text(
+                source.replace("/usr/local/bin/pelagian-shell-consumer", str(hook)),
+                encoding="utf-8",
+            )
+            environment = os.environ | {
+                "TEST_STARTED": str(marker),
+                "TEST_STOP": str(stop),
+                "XDG_STATE_HOME": str(root / "state"),
+            }
+            process = subprocess.Popen(["sh", str(autostart)], env=environment)
+            try:
+                self.wait_for(marker)
+                self.assertIsNone(process.poll())
+                stop.touch()
+                self.assertEqual(0, process.wait(timeout=2))
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.wait(timeout=2)
+
+    def test_consumer_failure_is_recorded_for_the_restart_watchdog(self) -> None:
         root, _, temporary = self.run_autostart("echo consumer-failed; exit 7")
         with temporary:
             status = root / "state/pelagian-shell/consumer.status"

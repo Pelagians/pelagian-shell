@@ -21,6 +21,10 @@ The runtime applies:
 - static Labwc configuration, GTK 3/4 dark defaults, and the Shell theme; and
 - the optional `/usr/local/bin/pelagian-shell-consumer`, with logs, PID, and exit status under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
 
+The Shell session uses `/run/pelagian-shell` for `XDG_RUNTIME_DIR`, Labwc IPC, Wayland sockets, and the session D-Bus socket. It recreates this directory at container start with owner `abc` and mode `0700`. LinuxServer's previous `/config/.XDG` path is obsolete; Shell leaves existing files there untouched. Applications continue to store persistent state under `/config`.
+
+Shell exports `PELAGIAN_SHELL_WINDOW_CHROME=server` to the Wayland session and consumers. This v0 policy means ordinary top-level application windows yield chrome to Labwc, which owns their visible titlebar and close-only controls.
+
 Schema v1 accepts only `theme.variant = "dark"`; `light` is rejected. `layout.max_managed_windows` is constrained to `1..=6`, matching the planner and installed Labwc regions.
 
 `pelagian-layoutd status` reports process, connection, and reconciliation health rather than binary presence. Command acknowledgement leaves reconciliation `pending`; only a subsequent compositor observation matching planned outer geometry, state, and decoration makes it `healthy`. An unchanged plan that fails to converge within five seconds becomes `degraded` with an error. Retries remain bounded to once per second, and later convergence restores health:

@@ -56,7 +56,7 @@ sentinel=/tmp/pelagian-shell-session-smoke
 
 labwc_state() {
     "$engine" exec --user abc \
-        --env XDG_RUNTIME_DIR=/config/.XDG \
+        --env XDG_RUNTIME_DIR=/run/pelagian-shell \
         "$name" python3 -c '
 import os, socket
 s = socket.socket(socket.AF_UNIX)
@@ -240,7 +240,7 @@ wait_counts() {
 launch_fixture() {
     "$engine" exec -d --user abc \
         --env GDK_BACKEND=wayland \
-        --env XDG_RUNTIME_DIR=/config/.XDG \
+        --env XDG_RUNTIME_DIR=/run/pelagian-shell \
         --env WAYLAND_DISPLAY="$fixture_display" \
         "$name" /usr/local/bin/pelagian-shell-consumer "$1"
 }
@@ -317,7 +317,7 @@ labwc_action() {
     toplevel_id=$(python3 -c \
         'import json, sys; state=json.loads(sys.argv[1]); print(next(view["id"] for view in state["views"] if view["title"] == sys.argv[2]))' \
         "$state" "$title")
-    "$engine" exec -i --user abc --env XDG_RUNTIME_DIR=/config/.XDG \
+    "$engine" exec -i --user abc --env XDG_RUNTIME_DIR=/run/pelagian-shell \
         "$name" python3 - "$toplevel_id" "$action" <<'PY'
 import json
 import os
@@ -453,8 +453,10 @@ PY
     --volume "$config_volume:/config" \
     "$image" -c '
 set -eu
-mkdir -p /config/.config/labwc
+mkdir -p /config/.config/labwc /config/.XDG /config/.local/share/keyrings
 printf "%s\n" preserve-me > /config/pelagian-shell-smoke.sentinel
+printf "%s\n" obsolete-runtime-state > /config/.XDG/old-runtime-sentinel
+printf "%s\n" persistent-keyring > /config/.local/share/keyrings/keyring.sentinel
 printf "%s\n" "<stale />" > /config/.config/labwc/rc.xml
 '
 
@@ -517,7 +519,16 @@ fi
 "$engine" exec "$name" cat /tmp/pelagian-stream-smoke/ready
 fixture_display=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.display)
 [ -n "$fixture_display" ]
-"$engine" exec "$name" test -S "/config/.XDG/$fixture_display"
+"$engine" exec "$name" test -S /run/pelagian-shell/labwc.sock
+"$engine" exec "$name" test -S "/run/pelagian-shell/$fixture_display"
+"$engine" exec "$name" test -S /run/pelagian-shell/bus
+"$engine" exec "$name" sh -c '
+test "$(stat -c %u:%g:%a /run/pelagian-shell)" = "$(id -u abc):$(id -g abc):700"
+test "$(env | sed -n "s/^XDG_RUNTIME_DIR=//p")" = /run/pelagian-shell
+test "$(env | sed -n "s/^PELAGIAN_SHELL_WINDOW_CHROME=//p")" = server
+test "$(cat /config/.XDG/old-runtime-sentinel)" = obsolete-runtime-state
+test "$(cat /config/.local/share/keyrings/keyring.sentinel)" = persistent-keyring
+'
 
 wait_layout 1 "$width" "$height" One 0
 wait_counts 1 0
@@ -533,6 +544,7 @@ printf '%s\n' "$status" | grep -q '"layoutd":"healthy"'
 printf '%s\n' "$status" | grep -q '"compositor_adapter":"labwc-ipc"'
 printf '%s\n' "$status" | grep -q '"adapter_connected":true'
 printf '%s\n' "$status" | grep -q '"reconciliation":"healthy"'
+printf '%s\n' "$status" | grep -q '"window_chrome_policy":"server"'
 "$engine" exec "$name" sh -c '
 test "$(cat /config/pelagian-shell-smoke.sentinel)" = preserve-me
 cmp -s /defaults/labwc.xml /config/.config/labwc/rc.xml
@@ -617,7 +629,7 @@ done
 fixture_pid=$("$engine" exec "$name" cat /tmp/pelagian-layout-first.pid)
 "$engine" exec "$name" kill "$fixture_pid"
 "$engine" exec -d --user abc \
-    --env XDG_RUNTIME_DIR=/config/.XDG --env WAYLAND_DISPLAY="$fixture_display" \
+    --env XDG_RUNTIME_DIR=/run/pelagian-shell --env WAYLAND_DISPLAY="$fixture_display" \
     "$name" /usr/local/libexec/pelagian-late-configure
 wait_late_configure stale
 "$engine" exec "$name" test -f /tmp/pelagian-late-configure.stale

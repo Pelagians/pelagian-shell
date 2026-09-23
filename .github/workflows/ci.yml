@@ -52,6 +52,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.85.0
         with:
           components: clippy,rustfmt
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
       - name: Check format, lint, unit tests, and runtime contract
         run: make check
 
@@ -95,6 +98,8 @@ jobs:
           podman info
       - name: Build and smoke-test without privileges
         run: ENGINE=podman make container-smoke
+      - name: Regress rootless Podman with a relabeled /config bind mount
+        run: ENGINE=podman sh tests/container-bind-mount-smoke.sh pelagian-shell:0.1.0
 
   hermes-consumer:
     needs: [check, changes]
@@ -103,9 +108,10 @@ jobs:
     timeout-minutes: 90
     env:
       # Grotto's consumer hook and real-window/keyring/restart smoke contract.
-      GROTTO_COMMIT: 23305ea31f1fd0342e0185736708392216715662
+      GROTTO_COMMIT: 450c771c1e3dfda602849e23eb5d704ced6e0371
       SHELL_IMAGE: localhost/pelagian-shell:candidate
       HERMES_IMAGE: localhost/pelagian-shell-hermes:qualification
+      PELAGIAN_SHELL_CONFORMANCE_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:

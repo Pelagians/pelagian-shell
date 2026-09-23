@@ -4,7 +4,9 @@
 
 The canonical downstream base image is `ghcr.io/pelagians/pelagian-shell`. Consumers should pin its published digest or full `sha-<commit>` tag rather than copy shell files or derive directly from Selkies.
 
-The runtime provides strict TOML profile resolution, a deterministic layout planner, a live Labwc compositor adapter, and daemonized layoutd. Consumers install an executable `/usr/local/bin/pelagian-shell-consumer`; Shell-owned autostart starts layoutd first, launches the consumer independently, and records diagnostics under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`.
+The runtime provides strict TOML profile resolution, a deterministic layout planner, a live Labwc compositor adapter, and daemonized layoutd. Consumers install an executable `/usr/local/bin/pelagian-shell-consumer`; Shell-owned autostart starts layoutd once, launches the consumer as a child, waits for it, and records diagnostics under `${XDG_STATE_HOME:-/config/.local/state}/pelagian-shell/`. This lets LinuxServer's optional `RESTART_APP` watchdog restart the consumer after it exits without starting another layoutd supervisor.
+
+Session IPC lives under `/run/pelagian-shell`; persistent application state remains under `/config`. Shell exports `PELAGIAN_SHELL_WINDOW_CHROME=server` to consumer processes. See [`docs/window-chrome.md`](docs/window-chrome.md) for the v0 contract and Electron reference adapter.
 
 ## v0.1.0
 
@@ -18,6 +20,7 @@ Provides:
 - live Labwc compositor adapter;
 - daemonized layoutd; and
 - shellctl/status/config tooling.
+- a consumer-facing server-decoration policy and Electron reference adapter.
 
 v0.1.0 provides live automatic tiling for one through six normal windows while dialogs and transient windows float.
 

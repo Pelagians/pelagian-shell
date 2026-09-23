@@ -103,6 +103,7 @@ wine = false
         .env("PELAGIAN_SHELL_DATA_DIR", &share)
         .env("PELAGIAN_SHELL_ETC_DIR", &etc)
         .env("PELAGIAN_LAYOUTD_BIN", &layoutd)
+        .env("PELAGIAN_SHELL_WINDOW_CHROME", "server")
         .output()
         .unwrap();
 
@@ -111,6 +112,7 @@ wine = false
     assert!(stdout.contains("\"profile\":\"default\""));
     assert!(stdout.contains("\"capabilities\":{\"wine\":false}"));
     assert!(stdout.contains("\"compositor_adapter\":\"labwc-ipc\""));
+    assert!(stdout.contains("\"window_chrome_policy\":\"server\""));
     assert!(stdout.contains("\"runtime\":{\"layoutd\":\"healthy\""));
     assert!(stdout.contains("\"adapter_connected\":true"));
     assert!(stdout.contains("\"reconciliation\":\"healthy\""));

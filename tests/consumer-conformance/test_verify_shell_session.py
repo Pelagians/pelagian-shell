@@ -12,7 +12,7 @@ spec.loader.exec_module(module)
 class GeometryGateTests(unittest.TestCase):
     def setUp(self):
         self.area = dict(x=0, y=0, width=1920, height=1080)
-        self.view = dict(self.area, type="normal", parent_id=None, app_id="test-app",
+        self.view = dict(self.area, id=1, type="normal", parent_id=None, app_id="test-app",
                          title="Test App", decoration="full", titlebar_visible=True,
                          maximized=True, fullscreen=False, minimized=False, tiled=False, region="")
         self.state = dict(views=[self.view], outputs=[dict(usable_area=self.area)])
@@ -36,6 +36,28 @@ class GeometryGateTests(unittest.TestCase):
     def test_rejects_wrong_application(self):
         with self.assertRaises(AssertionError):
             module.verify(self.state, self.health, "unrelated")
+
+    def test_two_windows_use_the_left_right_split(self):
+        left = self.view | dict(
+            x=0, y=0, width=960, height=1080, maximized=False, tiled=True,
+            region="auto-2-left", title="Fixture"
+        )
+        right = self.view | dict(
+            x=960, y=0, width=960, height=1080, maximized=False, tiled=True,
+            region="auto-2-right", title="Grotto App"
+        )
+        state = self.state | dict(views=[left, right])
+        health = self.health | dict(managed_windows=2)
+        module.verify(state, health, "Grotto App", managed_count=2)
+
+    def test_dialog_is_floating_and_excluded_from_managed_count(self):
+        dialog = self.view | dict(
+            id=2, type="dialog", parent_id=1, title="Login", maximized=False,
+            tiled=False, region=""
+        )
+        state = self.state | dict(views=[self.view, dialog])
+        health = self.health | dict(floating_windows=1)
+        module.verify(state, health, "test-app", floating_count=1)
 
 
 if __name__ == "__main__":
