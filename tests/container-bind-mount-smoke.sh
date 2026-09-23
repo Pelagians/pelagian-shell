@@ -176,7 +176,6 @@ start_container() {
         --env PELAGIAN_SHELL_LABWC_VERBOSE=true \
         --volume "$host_config:/config:Z" \
         --volume "$root/tests/bind-mount-consumer.sh:/usr/local/bin/pelagian-shell-consumer:ro,z" \
-        --volume "$root/tests/selkies-smoke-client.py:/tmp/selkies-smoke-client.py:ro,z" \
         "$image" >/dev/null
     port=$(podman port "$name" 3001/tcp | sed 's/.*://')
     [ -n "$port" ]
