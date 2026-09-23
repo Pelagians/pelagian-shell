@@ -29,7 +29,7 @@ cleanup() {
                 /etc/s6-overlay/s6-rc.d/svc-de/dependencies.d \
                 /etc/s6-overlay/s6-rc.d/svc-pulseaudio/dependencies.d \
                 /etc/s6-overlay/s6-rc.d/svc-selkies/dependencies.d \
-                -maxdepth 2 -type f \( -name '*pelagian*' -o -path '*/init-pelagian-runtime/*' \) \
+                -maxdepth 2 -type f \( -name "*pelagian*" -o -path "*/init-pelagian-runtime/*" \) \
                 -print 2>&1 || true
             echo "--- compiled Shell s6 graph"
             if command -v s6-rc-db >/dev/null 2>&1; then
@@ -48,11 +48,11 @@ cleanup() {
             done
             echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
             ls -la /run/pelagian-shell 2>&1 || true
-            echo "--- runtime ownership and abc write probe"; stat -c '%u:%g:%a %n' /run/pelagian-shell /config/.XDG 2>&1 || true
+            echo "--- runtime ownership and abc write probe"; stat -c "%u:%g:%a %n" /run/pelagian-shell /config/.XDG 2>&1 || true
             s6-setuidgid abc touch /run/pelagian-shell/.smoke-write 2>&1 || true
             s6-setuidgid abc rm -f /run/pelagian-shell/.smoke-write 2>&1 || true
             echo "--- supervised Selkies launch environment"
-            sed -n '1,220p' /run/service/svc-selkies/run 2>&1 || true
+            sed -n "1,220p" /run/service/svc-selkies/run 2>&1 || true
             with-contenv env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
             s6-envdir -fn /run/s6/container_environment env 2>&1 | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|RUST_BACKTRACE|PIXELFLUX_WAYLAND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
             echo "--- input setup"; ls -la /dev/input /tmp/selkies* 2>&1 || true
@@ -91,10 +91,27 @@ cleanup() {
                 printf "%s %s " "$pid" "$command"
                 cat "/proc/$pid/wchan" 2>/dev/null || true
             done
-        ' >&2 2>/dev/null || true
+            echo "--- fixture process"
+            consumer_pid=$(cat /config/.local/state/pelagian-shell/consumer.pid 2>/dev/null || true)
+            fixture_pid=$(cat /tmp/pelagian-layout-first.pid 2>/dev/null || true)
+            for pid in "$consumer_pid" "$fixture_pid"; do
+                case "$pid" in ""|*[!0-9]*) continue ;; esac
+                echo "PID $pid"
+                ps -ww -p "$pid" -o pid,ppid,uid,gid,stat,wchan:32,args 2>&1 || true
+                grep -E "^(Name|State|Uid|Gid|Groups):" "/proc/$pid/status" 2>&1 || true
+                printf "cmdline="; tr "\000" " " < "/proc/$pid/cmdline" 2>&1 || true; echo
+                printf "wchan="; cat "/proc/$pid/wchan" 2>&1 || true; echo
+                tr "\000" "\n" < "/proc/$pid/environ" 2>/dev/null | grep -E "^(HOME|XDG_RUNTIME_DIR|WAYLAND_DISPLAY|GDK_BACKEND|PELAGIAN_SHELL_WINDOW_CHROME)=" || true
+            done
+        ' >&2 || true
     fi
     podman rm -f "$name" >/dev/null 2>&1 || true
-    rm -rf "$host_config"
+    # LinuxServer initialization may chown the bind mount to the mapped abc
+    # UID. Restore the runner-owned temp directory before removing it.
+    if command -v sudo >/dev/null 2>&1; then
+        sudo chown -R "$(id -u):$(id -g)" "$host_config" >/dev/null 2>&1 || true
+    fi
+    rm -rf "$host_config" >/dev/null 2>&1 || true
     exit "$rc"
 }
 trap cleanup EXIT
