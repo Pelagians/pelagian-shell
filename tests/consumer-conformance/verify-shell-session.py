@@ -76,17 +76,29 @@ def snapshot():
     return json.loads(b"".join(chunks))
 
 
-def verify_app_bus(env, allow_missing_binary_bus=False):
+def verify_app_bus(env):
     runtime = env.get("XDG_RUNTIME_DIR", "")
     assert runtime, runtime
     expected = f"unix:path={runtime}/bus"
     address = env.get("DBUS_SESSION_BUS_ADDRESS")
-    if allow_missing_binary_bus and not address:
-        # A packaged binary can discard the launcher environment after exec.
-        # The exception still requires Shell's private session bus socket.
-        assert Path(runtime, "bus").is_socket(), expected
-    else:
-        assert address == expected, address
+    assert address == expected, address
+
+
+def opaque_binary_session_env(process_env, session_env, xwayland_cmdlines):
+    """Use Shell's live sockets when a packaged binary hides its own environment."""
+    runtime = session_env.get("XDG_RUNTIME_DIR", "")
+    assert runtime.startswith("/run/"), runtime
+    assert Path(runtime, "wayland-1").is_socket(), runtime
+    assert Path(runtime, "bus").is_socket(), runtime
+    displays = [arg.decode() for args in xwayland_cmdlines for arg in args.split(b"\0")
+                if re.fullmatch(rb":[0-9]+", arg)]
+    assert len(displays) == 1, displays
+    expected = {"XDG_RUNTIME_DIR": runtime, "WAYLAND_DISPLAY": "wayland-1",
+                "DISPLAY": displays[0], "DBUS_SESSION_BUS_ADDRESS": f"unix:path={runtime}/bus"}
+    for key, value in process_env.items():
+        if key in expected:
+            assert value == expected[key], (key, value, expected[key])
+    return {**session_env, **expected}
 
 
 def main():
@@ -94,13 +106,13 @@ def main():
     parser.add_argument("pattern")
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--keyring", choices=("store", "lookup"))
-    parser.add_argument("--binary-bus-exception", action="store_true",
-                        help="allow a binary-only client to discard its bus address; require the runtime bus socket")
+    parser.add_argument("--opaque-binary-env", action="store_true",
+                        help="verify an inspected binary client through Shell's sockets when it hides process environment")
     parser.add_argument("--managed-count", type=int, default=1)
     parser.add_argument("--floating-count", type=int)
     args = parser.parse_args()
-    if args.binary_bus_exception and (not args.native or args.keyring):
-        parser.error("--binary-bus-exception requires --native and cannot be used with --keyring")
+    if args.opaque_binary_env and (not args.native or args.keyring):
+        parser.error("--opaque-binary-env requires --native and cannot be used with --keyring")
     deadline = time.monotonic() + 180
     state = None
     while True:
@@ -120,13 +132,19 @@ def main():
         # the process environment, which can contain application credentials.
         entries = Path(f"/proc/{view['pid']}/environ").read_bytes().split(b"\0")
         selected = {"DISPLAY", "WAYLAND_DISPLAY", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"}
-        env = dict(os.environ)
+        process_env = {}
         for entry in entries:
             key, sep, value = entry.partition(b"=")
             if sep and key.decode() in selected:
-                env[key.decode()] = value.decode()
-        assert env.get("XDG_RUNTIME_DIR", "").startswith("/run/"), env.get("XDG_RUNTIME_DIR")
-        verify_app_bus(env, allow_missing_binary_bus=args.binary_bus_exception)
+                process_env[key.decode()] = value.decode()
+        if args.opaque_binary_env:
+            pids = command("pgrep", "-x", "Xwayland").splitlines()
+            cmdlines = [Path(f"/proc/{pid}/cmdline").read_bytes() for pid in pids]
+            env = opaque_binary_session_env(process_env, os.environ, cmdlines)
+        else:
+            env = {**os.environ, **process_env}
+            assert process_env.get("XDG_RUNTIME_DIR", "").startswith("/run/"), process_env.get("XDG_RUNTIME_DIR")
+            verify_app_bus(process_env)
         if args.native:
             assert env.get("WAYLAND_DISPLAY") and env.get("DISPLAY"), "missing application display coordinates"
             wayland = command("wlrctl", "toplevel", "list", env=env)
@@ -143,7 +161,7 @@ def main():
     print(
         f"consumer layout: {args.pattern}, managed={args.managed_count}, "
         f"floating={args.floating_count if args.floating_count is not None else 'unchecked'}, "
-        f"visible titlebar, 1920x1080, healthy{', binary bus exception' if args.binary_bus_exception else ''}"
+        f"visible titlebar, 1920x1080, healthy{', opaque binary environment' if args.opaque_binary_env else ''}"
     )
 
 
