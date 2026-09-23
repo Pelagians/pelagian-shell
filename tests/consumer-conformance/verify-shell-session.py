@@ -76,14 +76,31 @@ def snapshot():
     return json.loads(b"".join(chunks))
 
 
+def verify_app_bus(env, allow_missing_binary_bus=False):
+    runtime = env.get("XDG_RUNTIME_DIR", "")
+    assert runtime, runtime
+    expected = f"unix:path={runtime}/bus"
+    address = env.get("DBUS_SESSION_BUS_ADDRESS")
+    if allow_missing_binary_bus and not address:
+        # A packaged binary can discard the launcher environment after exec.
+        # The exception still requires Shell's private session bus socket.
+        assert Path(runtime, "bus").is_socket(), expected
+    else:
+        assert address == expected, address
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("pattern")
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--keyring", choices=("store", "lookup"))
+    parser.add_argument("--binary-bus-exception", action="store_true",
+                        help="allow a binary-only client to discard its bus address; require the runtime bus socket")
     parser.add_argument("--managed-count", type=int, default=1)
     parser.add_argument("--floating-count", type=int)
     args = parser.parse_args()
+    if args.binary_bus_exception and (not args.native or args.keyring):
+        parser.error("--binary-bus-exception requires --native and cannot be used with --keyring")
     deadline = time.monotonic() + 180
     state = None
     while True:
@@ -109,7 +126,7 @@ def main():
             if sep and key.decode() in selected:
                 env[key.decode()] = value.decode()
         assert env.get("XDG_RUNTIME_DIR", "").startswith("/run/"), env.get("XDG_RUNTIME_DIR")
-        assert env.get("DBUS_SESSION_BUS_ADDRESS") == f"unix:path={env['XDG_RUNTIME_DIR']}/bus", env.get("DBUS_SESSION_BUS_ADDRESS")
+        verify_app_bus(env, allow_missing_binary_bus=args.binary_bus_exception)
         if args.native:
             assert env.get("WAYLAND_DISPLAY") and env.get("DISPLAY"), "missing application display coordinates"
             wayland = command("wlrctl", "toplevel", "list", env=env)
@@ -126,7 +143,7 @@ def main():
     print(
         f"consumer layout: {args.pattern}, managed={args.managed_count}, "
         f"floating={args.floating_count if args.floating_count is not None else 'unchecked'}, "
-        "visible titlebar, 1920x1080, healthy"
+        f"visible titlebar, 1920x1080, healthy{', binary bus exception' if args.binary_bus_exception else ''}"
     )
 
 
