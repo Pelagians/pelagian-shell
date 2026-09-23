@@ -81,6 +81,17 @@ dump_failure() {
     "$engine" exec "$name" sh -c \
         'for file in /config/.local/state/pelagian-shell/output-mode.status /config/.local/state/pelagian-shell/output-mode.log /config/.local/state/pelagian-shell/labwc.log /config/.local/state/pelagian-shell/layoutd.log /config/.local/state/pelagian-shell/consumer.log /tmp/pelagian-stream-smoke.log; do test ! -f "$file" || { echo "--- $file"; tail -n 100 "$file"; }; done' \
         >&2 2>/dev/null || true
+    "$engine" exec "$name" sh -c '
+        echo "--- s6 active services"; s6-rc -a list 2>&1 || true
+        echo "--- session env files"; for key in XDG_RUNTIME_DIR WAYLAND_DISPLAY PIXELFLUX_WAYLAND; do
+            if test -r "/run/s6/container_environment/$key"; then
+                printf "%s=" "$key"; cat "/run/s6/container_environment/$key"
+            fi
+        done
+        echo "--- runtime directory"; ls -ld /run/pelagian-shell 2>&1 || true
+        ls -la /run/pelagian-shell 2>&1 || true
+        echo "--- processes"; ps -eo pid,comm
+    ' >&2 2>/dev/null || true
 }
 
 finish() {
