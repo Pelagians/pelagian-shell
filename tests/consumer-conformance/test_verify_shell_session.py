@@ -62,21 +62,27 @@ class GeometryGateTests(unittest.TestCase):
         module.verify(state, health, "test-app", floating_count=1)
 
 
-class BinaryBusExceptionTests(unittest.TestCase):
-    def test_missing_app_address_requires_exception_and_live_bus(self):
+class OpaqueBinarySessionTests(unittest.TestCase):
+    def test_opaque_client_uses_live_shell_sockets_and_rejects_conflicts(self):
         with tempfile.TemporaryDirectory(prefix="pelagian-bus-") as directory:
             env = {"XDG_RUNTIME_DIR": directory}
             with self.assertRaises(AssertionError):
-                module.verify_app_bus(env, allow_missing_binary_bus=True)
-            with patch.object(Path, "is_socket", return_value=True):
-                with self.assertRaises(AssertionError):
-                    module.verify_app_bus(env)
-                module.verify_app_bus(env, allow_missing_binary_bus=True)
-                env["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=/wrong/bus"
-                with self.assertRaises(AssertionError):
-                    module.verify_app_bus(env, allow_missing_binary_bus=True)
-                env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={directory}/bus"
                 module.verify_app_bus(env)
+            session = {"XDG_RUNTIME_DIR": "/run/pelagian-shell"}
+            cmdlines = [b"/usr/bin/Xwayland\0:1\0-rootless\0"]
+            with self.assertRaises(AssertionError):
+                module.opaque_binary_session_env({}, session, cmdlines)
+            with patch.object(Path, "is_socket", return_value=True):
+                derived = module.opaque_binary_session_env({}, session, cmdlines)
+                self.assertEqual(derived["WAYLAND_DISPLAY"], "wayland-1")
+                self.assertEqual(derived["DISPLAY"], ":1")
+                self.assertEqual(derived["DBUS_SESSION_BUS_ADDRESS"],
+                                 "unix:path=/run/pelagian-shell/bus")
+                with self.assertRaises(AssertionError):
+                    module.opaque_binary_session_env({"WAYLAND_DISPLAY": "wayland-0"},
+                                                     session, cmdlines)
+                with self.assertRaises(AssertionError):
+                    module.opaque_binary_session_env({}, session, cmdlines * 2)
 
 
 if __name__ == "__main__":
