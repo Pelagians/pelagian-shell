@@ -609,9 +609,24 @@ while [ "$attempt" -lt 60 ]; do
 done
 if [ -z "$ready" ]; then
     echo "pelagian-shell smoke: Labwc, session autostart, or Selkies HTTPS did not become ready" >&2
-    producer_probe=$("$engine" exec --user abc "$name" \
-        timeout 12s with-contenv env RUST_BACKTRACE=full WAYLAND_DISPLAY=wayland-1 \
-        selkies --addr=localhost --mode=websockets 2>&1 || true)
+    producer_probe=$("$engine" exec "$name" sh -c '
+        echo "--- installed PixelFlux package"
+        /lsiopy/bin/pip show pixelflux 2>&1 | sed -n "1,8p" || true
+        if ! command -v strace >/dev/null 2>&1; then
+            apt-get update -qq && apt-get install -y -qq strace >/dev/null || {
+                echo "strace diagnostic unavailable"
+                exit 0
+            }
+        fi
+        echo "--- direct Selkies startup probe"
+        timeout 12s strace -f -o /tmp/pelagian-selkies.strace \
+            -e trace=%file,socket,bind,connect \
+            s6-setuidgid abc with-contenv env RUST_BACKTRACE=full WAYLAND_DISPLAY=wayland-1 \
+            selkies --addr=localhost --mode=websockets
+        echo "direct Selkies exit=$?"
+        echo "--- denied file and socket operations"
+        grep -E "EACCES|EPERM|pelagian-shell|wayland" /tmp/pelagian-selkies.strace | tail -n 80 || true
+    ' 2>&1 || true)
     exit 1
 fi
 
