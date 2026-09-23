@@ -2,7 +2,9 @@
 """Regression tests for the real-window smoke gate."""
 import importlib.util
 from pathlib import Path
+import tempfile
 import unittest
+from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("shell_check", Path(__file__).with_name("verify-shell-session.py"))
 module = importlib.util.module_from_spec(spec)
@@ -58,6 +60,23 @@ class GeometryGateTests(unittest.TestCase):
         state = self.state | dict(views=[self.view, dialog])
         health = self.health | dict(floating_windows=1)
         module.verify(state, health, "test-app", floating_count=1)
+
+
+class BinaryBusExceptionTests(unittest.TestCase):
+    def test_missing_app_address_requires_exception_and_live_bus(self):
+        with tempfile.TemporaryDirectory(prefix="pelagian-bus-") as directory:
+            env = {"XDG_RUNTIME_DIR": directory}
+            with self.assertRaises(AssertionError):
+                module.verify_app_bus(env, allow_missing_binary_bus=True)
+            with patch.object(Path, "is_socket", return_value=True):
+                with self.assertRaises(AssertionError):
+                    module.verify_app_bus(env)
+                module.verify_app_bus(env, allow_missing_binary_bus=True)
+                env["DBUS_SESSION_BUS_ADDRESS"] = "unix:path=/wrong/bus"
+                with self.assertRaises(AssertionError):
+                    module.verify_app_bus(env, allow_missing_binary_bus=True)
+                env["DBUS_SESSION_BUS_ADDRESS"] = f"unix:path={directory}/bus"
+                module.verify_app_bus(env)
 
 
 if __name__ == "__main__":
