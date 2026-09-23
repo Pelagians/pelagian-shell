@@ -609,11 +609,9 @@ while [ "$attempt" -lt 60 ]; do
 done
 if [ -z "$ready" ]; then
     echo "pelagian-shell smoke: Labwc, session autostart, or Selkies HTTPS did not become ready" >&2
-    producer_probe=$("$engine" exec --user abc --env XDG_RUNTIME_DIR=/run/pelagian-shell "$name" \
-        timeout 12s env RUST_BACKTRACE=full \
-        LD_PRELOAD=/usr/lib/selkies_joystick_interposer.so:/opt/lib/libudev.so.1.0.0-fake \
-        /lsiopy/bin/python3 -c 'import pixelflux; print("PixelFlux import complete", flush=True)' \
-        2>&1 || true)
+    producer_probe=$("$engine" exec --user abc "$name" \
+        timeout 12s with-contenv env RUST_BACKTRACE=full WAYLAND_DISPLAY=wayland-1 \
+        selkies --addr=localhost --mode=websockets 2>&1 || true)
     exit 1
 fi
 
