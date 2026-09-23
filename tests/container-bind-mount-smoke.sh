@@ -263,7 +263,7 @@ qualify_stream_and_session() {
     '
     assert_process_runtime consumer \
         "$(podman exec "$name" cat /config/.local/state/pelagian-shell/consumer.pid)"
-    podman exec "$name" test "$(cat /config/bind-mount-persistence.sentinel)" = persisted-after-recreate
+    podman exec "$name" sh -c 'test "$(cat /config/bind-mount-persistence.sentinel)" = persisted-after-recreate'
     podman exec "$name" test -S /run/pelagian-shell/wayland-1
     assert_no_wayland_permission_error
 }
